@@ -1,24 +1,25 @@
 import './style.css'
 
 // State management
-let audioContext;
-let analyser;
-let source;
-let dataArray;
-let animationId;
-let mediaRecorder;
+let audioContext, analyser, source, dataArray, animationId, mediaRecorder;
 let recordedChunks = [];
-let audioFile;
+let audioFile, audioSource;
 let isRecording = false;
 let brandImage = null;
 
+// Screensaver States
+let stars = [];
+let bounceX = 100, bounceY = 100, dx = 2.5, dy = 2.5;
+let cycleInterval = null;
+
 // DOM Elements
 const canvas = document.getElementById('visualizer');
-const ctx = canvas.getContext('2d');
+const ctx = canvas.getContext('2d', { alpha: false }); // Performance optimization
 const dropZone = document.getElementById('drop-zone');
 const fileInput = document.getElementById('file-input');
 const fileBtn = document.getElementById('file-btn');
 const playBtn = document.getElementById('play-btn');
+const stopPreviewBtn = document.getElementById('stop-preview-btn');
 const recordBtn = document.getElementById('record-btn');
 const stopBtn = document.getElementById('stop-btn');
 const statusBadge = document.getElementById('status');
@@ -26,6 +27,13 @@ const sensitivitySlider = document.getElementById('sensitivity');
 const styleSelect = document.getElementById('style-select');
 const palettes = document.querySelectorAll('.palette');
 const recordingOverlay = document.getElementById('recording-overlay');
+
+// Toggles
+const cycleToggle = document.getElementById('cycle-toggle');
+const cycleSelection = document.getElementById('cycle-selection');
+const cycleStyleCheckboxes = document.querySelectorAll('.cycle-style');
+const floatToggle = document.getElementById('float-toggle');
+const spectroToggle = document.getElementById('spectro-toggle');
 
 // Branding Elements
 const brandBtn = document.getElementById('brand-btn');
@@ -43,10 +51,27 @@ let config = {
   brandScale: 20
 };
 
-// Initialize Canvas Size
+// Initialize Stars
+function initStars() {
+  stars = [];
+  for(let i = 0; i < 400; i++) {
+    stars.push({
+      x: Math.random() * 2000 - 1000,
+      y: Math.random() * 2000 - 1000,
+      z: Math.random() * 1000
+    });
+  }
+}
+initStars();
+
+// Cache canvas dimensions
+let width, height, centerX, centerY, radius;
 function resize() {
-  canvas.width = canvas.offsetWidth * window.devicePixelRatio;
-  canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+  width = canvas.width = canvas.offsetWidth * window.devicePixelRatio;
+  height = canvas.height = canvas.offsetHeight * window.devicePixelRatio;
+  centerX = width / 2;
+  centerY = height / 2;
+  radius = Math.min(width, height) / 4;
 }
 window.addEventListener('resize', resize);
 resize();
@@ -69,10 +94,9 @@ function handleFile(file) {
   dropZone.classList.add('hidden');
   playBtn.disabled = false;
   recordBtn.disabled = false;
-  statusBadge.textContent = 'Ready: ' + file.name;
+  statusBadge.textContent = 'Track Loaded: ' + file.name;
 }
 
-// Branding Handling
 brandBtn.onclick = () => brandInput.click();
 brandInput.onchange = (e) => {
   const file = e.target.files[0];
@@ -92,163 +116,180 @@ brandInput.onchange = (e) => {
 // Audio Setup
 async function setupAudio() {
   if (audioContext) await audioContext.close();
-  
   audioContext = new (window.AudioContext || window.webkitAudioContext)();
   analyser = audioContext.createAnalyser();
   analyser.fftSize = 512;
-  analyser.smoothingTimeConstant = 0.8;
-  
+  analyser.smoothingTimeConstant = 0.85;
   const buffer = await audioFile.arrayBuffer();
   const audioBuffer = await audioContext.decodeAudioData(buffer);
-  
-  const audioSource = audioContext.createBufferSource();
+  audioSource = audioContext.createBufferSource();
   audioSource.buffer = audioBuffer;
   audioSource.connect(analyser);
   analyser.connect(audioContext.destination);
-  
   dataArray = new Uint8Array(analyser.frequencyBinCount);
-  
   return audioSource;
 }
 
-// Visualizer Logic
+// Optimized Draw Loop
 function draw() {
   animationId = requestAnimationFrame(draw);
   analyser.getByteFrequencyData(dataArray);
   
-  const width = canvas.width;
-  const height = canvas.height;
-  ctx.clearRect(0, 0, width, height);
+  // Single clear for performance
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, width, height);
   
-  const centerX = width / 2;
-  const centerY = height / 2;
-  const radius = Math.min(width, height) / 4;
-  const bars = analyser.frequencyBinCount;
-  const sensitivity = config.sensitivity;
+  const sens = config.sensitivity;
+  const bars = dataArray.length;
+  let sum = 0;
+  for(let i = 0; i < bars; i++) sum += dataArray[i];
+  const avg = sum / bars;
 
-  if (config.style === 'circular') {
-    drawCircular(centerX, centerY, radius, bars, sensitivity, 'out');
-  } else if (config.style === 'circular-inner') {
-    drawCircular(centerX, centerY, radius, bars, sensitivity, 'in');
-  } else if (config.style === 'circular-dual') {
-    drawCircular(centerX, centerY, radius, bars, sensitivity, 'dual');
-  } else if (config.style === 'bars') {
-    drawBars(width, height, bars, sensitivity);
-  } else {
-    drawWave(width, height, bars, sensitivity);
+  ctx.lineCap = 'round';
+  ctx.lineWidth = 2;
+
+  switch(config.style) {
+    case 'circular': drawCircular(bars, sens, 'out'); break;
+    case 'circular-inner': drawCircular(bars, sens, 'in'); break;
+    case 'circular-dual': drawCircular(bars, sens, 'dual'); break;
+    case 'starfield': drawStarfield(avg); break;
+    case 'bouncing': drawBouncing(avg); break;
+    case 'bars': drawBars(bars, sens); break;
+    case 'wave': drawWave(bars, sens); break;
   }
 
-  if (brandImage) {
-    drawBranding(width, height);
-  }
+  if (spectroToggle.checked) drawSpectro();
+  if (brandImage && !floatToggle.checked && config.style !== 'bouncing') drawBranding();
 }
 
-function drawCircular(cx, cy, r, bars, sens, dir) {
+function drawCircular(bars, sens, dir) {
+  ctx.strokeStyle = config.colors[0];
   for (let i = 0; i < bars; i++) {
-    const barHeight = (dataArray[i] / 255) * r * (sens / 5);
+    const barHeight = (dataArray[i] / 255) * radius * (sens / 5);
     const angle = (i / bars) * Math.PI * 2;
+    const cos = Math.cos(angle);
+    const sin = Math.sin(angle);
     
     let x1, y1, x2, y2;
-    
     if (dir === 'out') {
-      x1 = cx + Math.cos(angle) * r;
-      y1 = cy + Math.sin(angle) * r;
-      x2 = cx + Math.cos(angle) * (r + barHeight);
-      y2 = cy + Math.sin(angle) * (r + barHeight);
+      x1 = centerX + cos * radius; y1 = centerY + sin * radius;
+      x2 = centerX + cos * (radius + barHeight); y2 = centerY + sin * (radius + barHeight);
     } else if (dir === 'in') {
-      x1 = cx + Math.cos(angle) * r;
-      y1 = cy + Math.sin(angle) * r;
-      x2 = cx + Math.cos(angle) * (r - barHeight);
-      y2 = cy + Math.sin(angle) * (r - barHeight);
-    } else { // Dual
-      x1 = cx + Math.cos(angle) * (r - barHeight/2);
-      y1 = cy + Math.sin(angle) * (r - barHeight/2);
-      x2 = cx + Math.cos(angle) * (r + barHeight/2);
-      y2 = cy + Math.sin(angle) * (r + barHeight/2);
+      x1 = centerX + cos * radius; y1 = centerY + sin * radius;
+      x2 = centerX + cos * (radius - barHeight); y2 = centerY + sin * (radius - barHeight);
+    } else {
+      x1 = centerX + cos * (radius - barHeight/2); y1 = centerY + sin * (radius - barHeight/2);
+      x2 = centerX + cos * (radius + barHeight/2); y2 = centerY + sin * (radius + barHeight/2);
     }
     
-    const gradient = ctx.createLinearGradient(x1, y1, x2, y2);
-    gradient.addColorStop(0, config.colors[0]);
-    gradient.addColorStop(1, config.colors[1]);
-    
-    ctx.strokeStyle = gradient;
-    ctx.lineWidth = (r * 2 * Math.PI / bars) * 0.8;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(x1, y1);
-    ctx.lineTo(x2, y2);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
     
     // Symmetrical
-    const angleSym = -angle;
+    const nCos = Math.cos(-angle);
+    const nSin = Math.sin(-angle);
     let sx1, sy1, sx2, sy2;
     if (dir === 'out') {
-      sx1 = cx + Math.cos(angleSym) * r; sy1 = cy + Math.sin(angleSym) * r;
-      sx2 = cx + Math.cos(angleSym) * (r + barHeight); sy2 = cy + Math.sin(angleSym) * (r + barHeight);
+      sx1 = centerX + nCos * radius; sy1 = centerY + nSin * radius;
+      sx2 = centerX + nCos * (radius + barHeight); sy2 = centerY + nSin * (radius + barHeight);
     } else if (dir === 'in') {
-      sx1 = cx + Math.cos(angleSym) * r; sy1 = cy + Math.sin(angleSym) * r;
-      sx2 = cx + Math.cos(angleSym) * (r - barHeight); sy2 = cy + Math.sin(angleSym) * (r - barHeight);
+      sx1 = centerX + nCos * radius; sy1 = centerY + nSin * radius;
+      sx2 = centerX + nCos * (radius - barHeight); sy2 = centerY + nSin * (radius - barHeight);
     } else {
-      sx1 = cx + Math.cos(angleSym) * (r - barHeight/2); sy1 = cy + Math.sin(angleSym) * (r - barHeight/2);
-      sx2 = cx + Math.cos(angleSym) * (r + barHeight/2); sy2 = cy + Math.sin(angleSym) * (r + barHeight/2);
+      sx1 = centerX + nCos * (radius - barHeight/2); sy1 = centerY + nSin * (radius - barHeight/2);
+      sx2 = centerX + nCos * (radius + barHeight/2); sy2 = centerY + nSin * (radius + barHeight/2);
     }
-    ctx.beginPath();
-    ctx.moveTo(sx1, sy1);
-    ctx.lineTo(sx2, sy2);
-    ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(sx1, sy1); ctx.lineTo(sx2, sy2); ctx.stroke();
   }
 }
 
-function drawBranding(w, h) {
-  const padding = 40;
+function drawStarfield(avg) {
+  const speed = 2 + (avg / 255) * 40;
+  ctx.fillStyle = '#fff';
+  for(let i = 0; i < stars.length; i++) {
+    const s = stars[i];
+    s.z -= speed;
+    if(s.z <= 0) s.z = 1000;
+    const sx = (s.x / s.z) * width + centerX;
+    const sy = (s.y / s.z) * height + centerY;
+    const size = (1 - s.z / 1000) * 4;
+    if (sx > 0 && sx < width && sy > 0 && sy < height) {
+      ctx.fillRect(sx, sy, size, size);
+    }
+  }
+}
+
+function drawBouncing(avg) {
   const scale = brandScale.value / 100;
-  const brandW = brandImage.width * scale;
-  const brandH = brandImage.height * scale;
+  const bw = brandImage ? brandImage.width * scale : 200;
+  const bh = brandImage ? brandImage.height * scale : 50;
   
-  let bx, by;
-  
-  switch(brandPos.value) {
-    case 'top-right': bx = w - brandW - padding; by = padding; break;
-    case 'top-left': bx = padding; by = padding; break;
-    case 'bottom-right': bx = w - brandW - padding; by = h - brandH - padding; break;
-    case 'bottom-left': bx = padding; by = h - brandH - padding; break;
-    case 'center': bx = (w - brandW) / 2; by = (h - brandH) / 2; break;
+  if (brandImage) {
+    ctx.drawImage(brandImage, bounceX, bounceY, bw, bh);
+  } else {
+    ctx.fillStyle = config.colors[0];
+    ctx.font = 'bold 30px Inter';
+    ctx.fillText('CHOMBIE WOMBIE', bounceX, bounceY + 30);
   }
   
-  ctx.globalAlpha = 0.8;
-  ctx.drawImage(brandImage, bx, by, brandW, brandH);
+  const speedBoost = 1 + (avg / 255) * 4;
+  bounceX += dx * speedBoost;
+  bounceY += dy * speedBoost;
+  if (bounceX <= 0 || bounceX + bw >= width) dx *= -1;
+  if (bounceY <= 0 || bounceY + bh >= height) dy *= -1;
+}
+
+function drawBranding() {
+  const padding = 60;
+  const scale = brandScale.value / 100;
+  const bw = brandImage.width * scale;
+  const bh = brandImage.height * scale;
+  let bx, by;
+  switch(brandPos.value) {
+    case 'top-right': bx = width - bw - padding; by = padding; break;
+    case 'top-left': bx = padding; by = padding; break;
+    case 'bottom-right': bx = width - bw - padding; by = height - bh - padding; break;
+    case 'bottom-left': bx = padding; by = height - bh - padding; break;
+    case 'center': bx = centerX - bw/2; by = centerY - bh/2; break;
+  }
+  ctx.globalAlpha = 0.9;
+  ctx.drawImage(brandImage, bx, by, bw, bh);
   ctx.globalAlpha = 1.0;
 }
 
-function drawBars(w, h, bars, sens) {
-  const barWidth = (w / bars) * 2.5;
-  let x = 0;
-  for(let i = 0; i < bars; i++) {
-    const barHeight = (dataArray[i] / 255) * h * 0.5 * (sens / 5);
-    ctx.fillStyle = config.colors[i % 2 === 0 ? 0 : 1];
-    ctx.fillRect(x, h - barHeight, barWidth, barHeight);
-    x += barWidth + 1;
+function drawSpectro() {
+  const barW = width / dataArray.length;
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+  for(let i = 0; i < dataArray.length; i++) {
+    const barH = (dataArray[i] / 255) * 120;
+    ctx.fillRect(i * barW, height - barH, barW, barH);
   }
 }
 
-function drawWave(w, h, bars, sens) {
+function drawBars(bars, sens) {
+  const barWidth = (width / bars) * 2;
+  ctx.fillStyle = config.colors[0];
+  for(let i = 0; i < bars; i++) {
+    const barHeight = (dataArray[i] / 255) * height * 0.4 * (sens / 5);
+    ctx.fillRect(i * (barWidth + 2), height - barHeight, barWidth, barHeight);
+  }
+}
+
+function drawWave(bars, sens) {
   ctx.beginPath();
-  ctx.lineWidth = 3;
   ctx.strokeStyle = config.colors[0];
-  const sliceWidth = w / bars;
+  const sliceWidth = width / bars;
   let x = 0;
   for(let i = 0; i < bars; i++) {
     const v = dataArray[i] / 128.0;
-    const y = v * h / 2;
+    const y = v * height / 2.5;
     if(i === 0) ctx.moveTo(x, y);
     else ctx.lineTo(x, y);
     x += sliceWidth;
   }
-  ctx.lineTo(w, h / 2);
   ctx.stroke();
 }
 
-// Controls
+// Handlers
 sensitivitySlider.oninput = (e) => config.sensitivity = e.target.value;
 styleSelect.onchange = (e) => config.style = e.target.value;
 palettes.forEach(p => {
@@ -259,88 +300,80 @@ palettes.forEach(p => {
   };
 });
 
-// Recording Logic
+cycleToggle.onchange = () => {
+  if (cycleToggle.checked) {
+    cycleSelection.classList.remove('hidden');
+    cycleInterval = setInterval(() => {
+      const checkedStyles = Array.from(cycleStyleCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+      
+      if (checkedStyles.length > 0) {
+        const currentIndex = checkedStyles.indexOf(config.style);
+        const nextStyle = checkedStyles[(currentIndex + 1) % checkedStyles.length];
+        config.style = nextStyle;
+        styleSelect.value = nextStyle;
+      }
+    }, 5000);
+  } else {
+    cycleSelection.classList.add('hidden');
+    clearInterval(cycleInterval);
+  }
+};
+
+floatToggle.onchange = () => { if (floatToggle.checked) config.style = 'bouncing'; };
+
+playBtn.onclick = async () => {
+  const source = await setupAudio();
+  source.start(0);
+  draw();
+  playBtn.disabled = true;
+  stopPreviewBtn.disabled = false;
+  statusBadge.textContent = 'Preview Playing';
+  source.onended = stopPreview;
+};
+
+stopPreviewBtn.onclick = stopPreview;
+
+function stopPreview() {
+  if (audioSource) try { audioSource.stop(); } catch(e) {}
+  cancelAnimationFrame(animationId);
+  playBtn.disabled = false;
+  stopPreviewBtn.disabled = true;
+  statusBadge.textContent = 'Preview Stopped';
+}
+
 recordBtn.onclick = async () => {
-  if (isRecording) return;
-  
-  const audioSource = await setupAudio();
+  const source = await setupAudio();
   const dest = audioContext.createMediaStreamDestination();
   analyser.connect(dest);
-  
   const canvasStream = canvas.captureStream(60);
-  const combinedStream = new MediaStream([
-    ...canvasStream.getVideoTracks(),
-    ...dest.stream.getAudioTracks()
-  ]);
-  
-  mediaRecorder = new MediaRecorder(combinedStream, {
-    mimeType: 'video/webm;codecs=vp9',
-    videoBitsPerSecond: 8000000 // 8Mbps for higher quality
-  });
-  
+  const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+  mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 12000000 }); // High bitrate
   recordedChunks = [];
   mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
   mediaRecorder.onstop = exportVideo;
-  
   isRecording = true;
-  recordBtn.classList.add('active');
   recordingOverlay.style.display = 'flex';
-  
-  audioSource.start(0);
+  source.start(0);
   mediaRecorder.start();
   draw();
-  
-  audioSource.onended = () => {
-    if (isRecording) stopRecording();
-  };
+  source.onended = () => mediaRecorder.stop();
 };
-
-stopBtn.onclick = stopRecording;
-
-function stopRecording() {
-  mediaRecorder.stop();
-  cancelAnimationFrame(animationId);
-  isRecording = false;
-  recordBtn.classList.remove('active');
-}
 
 async function exportVideo() {
   const blob = new Blob(recordedChunks, { type: 'video/webm' });
   const formData = new FormData();
   formData.append('video', blob);
-  
-  statusBadge.textContent = 'Processing Video...';
-  
+  statusBadge.textContent = 'Final Encoding...';
   try {
-    const response = await fetch('http://localhost:3001/api/encode', {
-      method: 'POST',
-      body: formData
-    });
-    
-    if (response.ok) {
-      const resultBlob = await response.blob();
-      const url = URL.createObjectURL(resultBlob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = 'chombiewombie-export.mp4';
-      a.click();
-      statusBadge.textContent = 'Download Complete!';
-    } else {
-      throw new Error('Encoding failed');
+    const res = await fetch('http://localhost:3001/api/encode', { method: 'POST', body: formData });
+    if (res.ok) {
+      const result = await res.blob();
+      const url = URL.createObjectURL(result);
+      const a = document.createElement('a'); a.href = url; a.download = 'ChombieWombie-Export.mp4'; a.click();
     }
-  } catch (err) {
-    console.error(err);
-    statusBadge.textContent = 'Error: ' + err.message;
-  } finally {
-    recordingOverlay.style.display = 'none';
-  }
+  } catch (err) { console.error(err); }
+  recordingOverlay.style.display = 'none';
+  statusBadge.textContent = 'Export Complete';
 }
-
-// Play Preview Logic
-playBtn.onclick = async () => {
-  const audioSource = await setupAudio();
-  audioSource.start(0);
-  draw();
-  statusBadge.textContent = 'Playing Preview';
-  audioSource.onended = () => cancelAnimationFrame(animationId);
-};
