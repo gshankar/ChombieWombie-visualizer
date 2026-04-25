@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ChombieWombie | Music Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/style.css">
+  </head>
+  <body>
+    <div id="app">
+      <div class="background-mesh"></div>
+      
+      <header>
+        <div class="logo">CHOMBIE<span>WOMBIE</span></div>
+        <div class="status-badge" id="status">Ready</div>
+      </header>
+
+      <main>
+        <div class="visualizer-container">
+          <canvas id="visualizer"></canvas>
+          <div class="drop-zone" id="drop-zone">
+            <div class="drop-content">
+              <div class="icon">♪</div>
+              <h2>Drop Your Track</h2>
+              <p>Supports MP3, WAV, FLAC</p>
+              <button class="btn-primary" id="file-btn">Browse Files</button>
+              <input type="file" id="file-input" accept="audio/*" hidden />
+            </div>
+          </div>
+        </div>
+
+        <div class="controls-panel">
+          <div class="control-group">
+            <label>Sensitivity</label>
+            <input type="range" id="sensitivity" min="1" max="10" value="5" />
+          </div>
+          <div class="control-group">
+            <label>Color Palette</label>
+            <div class="palette-picker">
+              <button class="palette active" data-colors="#00f2ff,#ff00ea" style="background: linear-gradient(45deg, #00f2ff, #ff00ea)"></button>
+              <button class="palette" data-colors="#7000ff,#00ff88" style="background: linear-gradient(45deg, #7000ff, #00ff88)"></button>
+              <button class="palette" data-colors="#ff8c00,#ff0000" style="background: linear-gradient(45deg, #ff8c00, #ff0000)"></button>
+            </div>
+          </div>
+          <div class="control-group">
+            <label>Visual Style</label>
+            <select id="style-select">
+              <option value="circular">Circular: Outward</option>
+              <option value="circular-inner">Circular: Inward</option>
+              <option value="circular-dual">Circular: Dual</option>
+              <option value="bars">Linear Bars</option>
+              <option value="wave">Oscilloscope</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label>Branding (Watermark)</label>
+            <button class="btn-secondary" id="brand-btn">Upload Logo</button>
+            <input type="file" id="brand-input" accept="image/*" hidden />
+            <div id="brand-controls" class="hidden">
+              <div class="sub-control">
+                <span>Position</span>
+                <select id="brand-pos">
+                  <option value="top-right">Top Right</option>
+                  <option value="top-left">Top Left</option>
+                  <option value="bottom-right">Bottom Right</option>
+                  <option value="bottom-left">Bottom Left</option>
+                  <option value="center">Center</option>
+                </select>
+              </div>
+              <div class="sub-control">
+                <span>Scale</span>
+                <input type="range" id="brand-scale" min="10" max="50" value="20" />
+              </div>
+            </div>
+          </div>
+          
+          <div class="action-buttons">
+            <button class="btn-record" id="record-btn" disabled>
+              <span class="pulse"></span>
+              Record Video
+            </button>
+            <button class="btn-secondary" id="play-btn" disabled>Play Preview</button>
+          </div>
+        </div>
+      </main>
+
+      <div class="recording-overlay" id="recording-overlay">
+        <div class="recording-content">
+          <div class="spinner"></div>
+          <h3>Recording & Processing...</h3>
+          <p>Please keep this tab active.</p>
+          <button class="btn-danger" id="stop-btn">Stop & Export</button>
+        </div>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
