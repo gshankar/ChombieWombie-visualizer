@@ -49,6 +49,9 @@
           <div class="control-group">
             <label>Visual Style</label>
             <select id="style-select">
+              <option value="3d-sphere">3D: Audio Sphere</option>
+              <option value="3d-terrain">3D: Retro Terrain</option>
+              <option value="3d-tunnel">3D: Hyper Tunnel</option>
               <option value="circular">Circular: Outward</option>
               <option value="circular-inner">Circular: Inward</option>
               <option value="circular-dual">Circular: Dual</option>
@@ -82,6 +85,22 @@
             <div class="toggle-control">
               <label>Show Spectrograph</label>
               <input type="checkbox" id="spectro-toggle" checked />
+            </div>
+          </div>
+
+          <div class="control-group">
+            <label>Retro Filters</label>
+            <div class="toggle-control">
+              <label>VHS Mode</label>
+              <input type="checkbox" id="vhs-toggle" />
+            </div>
+            <div class="toggle-control">
+              <label>CRT Scanlines</label>
+              <input type="checkbox" id="crt-toggle" />
+            </div>
+            <div class="toggle-control">
+              <label>Glitch Effect</label>
+              <input type="checkbox" id="glitch-toggle" />
             </div>
           </div>
 
