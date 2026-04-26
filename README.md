@@ -6,29 +6,31 @@ Transform your music into stunning, high-end 3D and 2D visualizations. **Chombie
 
 ## ✨ Core Features
 
+### 🏎️ Studio Render Engine (New)
+- **Background Rendering**: No more real-time waiting. Process videos as fast as your hardware allows.
+- **Headless Pipeline**: Uses Puppeteer and Metal GPU acceleration to render every frame deterministically.
+- **Master Quality**: 1080p 60FPS video with 320kbps AAC audio.
+
 ### 🎨 Dual Immersive Engines
-- **Classic 2D Engine**: High-fidelity vector visuals.
-  - *Styles*: Circular (In/Out/Dual), Neon Sunrise, Neon Mystify, Cyber Plasma, and Linear Bars.
-- **Immersive 3D Engine**: Cinematic WebGL environments.
-  - *Styles*: Neon Sphere (Distorted), Grid Terrain, Warp Tunnel, Cyber Starfield, Bouncing Cube, and Grid Runner.
+- **Classic 2D Engine**: High-fidelity vector visuals (Neon Sunrise, Cyber Plasma, etc.).
+- **Immersive 3D Engine**: Cinematic WebGL environments (Grid Runner, Bouncing Cube, etc.).
 
 ### 🎥 Cinematographic Motion
-- **Director Camera Paths**: Each 3D style features a unique, cinematic camera path (Orbiting, Drifting, Tracking) that follows the energy of the music.
-- **Dynamic Post-Processing**: Bloom intensity and glitch filters pulse in real-time with audio peaks, creating a living, breathing light show.
+- **Director Camera Paths**: Each 3D style features a unique, cinematic camera path that follows the energy of the music.
+- **Dynamic Post-Processing**: Bloom and filters pulse in real-time with audio peaks.
 
-### 🎬 One-Click MP4 Export
-- **Real-time Recording**: Capture your session at 60FPS directly in the browser.
-- **Professional Transcoding**: Backend FFmpeg integration converts recordings into high-bitrate `.mp4` files with crisp AAC audio, optimized for social media and YouTube.
+---
 
-### 🎭 Retro-Futuristic Filters
-- **VHS Distortion**: Chromatic aberration, color bleed, and additive glow scanlines.
-- **CRT Simulation**: Barrel curvature and high-resolution phosphorus scanlines.
-- **Luminous Glitch**: Automatic, beat-synced digital artifacts that "pop" during massive drops.
+## 💻 Recommended Hardware Specifications
+For optimal performance with the **Studio Render Engine**, we recommend high-end hardware (e.g., Mac Studio):
 
-### 🏷️ Brand Integration
-- **Custom Typography**: Styled with the official **ChombieWombie** brush-script aesthetic.
-- **Session Branding**: Support for custom logo watermarks with precise positioning and scaling.
-- **Dynamic Palettes**: Curated neon color systems with optional **Color Cycle** (Rainbow Mode).
+| Component | Recommended Spec | Rationale |
+| :--- | :--- | :--- |
+| **CPU** | Apple M1 Max / M2 Ultra (or 12+ Core Intel/AMD) | Parallel FFmpeg encoding & audio analysis. |
+| **GPU** | 32+ Core GPU (Metal / Vulkan support) | High-speed headless WebGL frame rendering. |
+| **RAM** | 32GB+ | Handling large audio frequency maps and browser instances. |
+| **Storage** | NVMe SSD | Fast frame-buffer piping and video writing. |
+| **OS** | macOS (for Metal acceleration) or Linux with GPU drivers | Leverages hardware-specific GPU APIs for headless rendering. |
 
 ---
 
@@ -38,7 +40,7 @@ Transform your music into stunning, high-end 3D and 2D visualizations. **Chombie
 - [Node.js](https://nodejs.org/) (v16+)
 - [FFmpeg](https://ffmpeg.org/) (Installed on your system path)
 
-### 1. Backend Setup (Video Encoder)
+### 1. Backend Setup (Video Encoder & Studio Engine)
 ```bash
 cd backend
 npm install
@@ -46,7 +48,7 @@ npm start
 ```
 *The backend runs on http://localhost:3001*
 
-### 2. Frontend Setup (Visualizer)
+### 2. Frontend Setup (Visualizer Dashboard)
 ```bash
 cd frontend
 npm install
@@ -59,20 +61,19 @@ npm run dev
 ## 📖 How to Use
 
 1. **Upload Track**: Drag and drop your audio file into the **"Visualize your Mixes"** zone.
-2. **Configure Visuals**:
-   - Choose your **Engine** and **Style**.
-   - Pick a **Color Palette** or enable **Cycle Colors**.
-   - Set the **Cycle Visuals** timer (default 60s) for a dynamic set.
-3. **Toggle Filters**: Enable VHS, CRT, or Glitch modes for that analog aesthetic.
-4. **Preview**: Hit **Play** to witness the cinematographic motion.
-5. **Export**: Click **Record Video**. The app will play through your track and automatically download the final `.mp4`.
+2. **Configure Visuals**: Choose your Engine, Style, and Palette.
+3. **Studio Render**: Click **Record Video**. The app will:
+   - Perform an **Offline Analysis** of the audio.
+   - Launch the **Background Render Engine**.
+   - Automatically download the final **Master MP4** when finished.
+4. **Preview**: Hit **Play** to see the cinematographic motion in real-time before rendering.
 
 ---
 
 ## 🚀 Technologies Used
-- **Frontend**: Vite, Three.js, Vanilla JS, CSS Glassmorphism.
-- **Backend**: Node.js, Express, Fluent-FFmpeg.
-- **Audio**: Web Audio API (AnalyserNode with LERP smoothing).
+- **Frontend**: Vite, Three.js, Web Audio API (Offline Rendering).
+- **Backend**: Puppeteer (Headless Browser), Node.js, Fluent-FFmpeg.
+- **GPU API**: Metal (via Chrome ANGLE).
 
 ---
 
