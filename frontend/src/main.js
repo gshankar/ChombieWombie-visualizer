@@ -147,6 +147,8 @@ function attachEventListeners() {
   if (rb) rb.onclick = handleRecord;
   const reb = get('reset-engine-btn');
   if (reb) reb.onclick = handleResetBackend;
+  const ltb = get('load-test-btn');
+  if (ltb) ltb.onclick = handleLoadTestTrack;
 
   document.querySelectorAll('.palette').forEach(p => {
     p.onclick = () => {
@@ -195,6 +197,24 @@ function stopPreview() {
   const engineSelect = get('engine-select');
   if (engineSelect) engineSelect.disabled = false;
   get('drop-zone').classList.remove('hidden');
+}
+
+async function handleLoadTestTrack(e) {
+  if (e) e.preventDefault();
+  const btn = get('load-test-btn');
+  btn.textContent = 'Loading...';
+  
+  try {
+    const response = await fetch('/test.mp3');
+    const blob = await response.blob();
+    const file = new File([blob], 'test.mp3', { type: 'audio/mpeg' });
+    handleFile(file);
+    btn.textContent = 'Test Track Loaded';
+    setTimeout(() => { if (btn) btn.textContent = 'Load Test Track'; }, 2000);
+  } catch (err) {
+    showError('Failed to load test track');
+    if (btn) btn.textContent = 'Load Test Track';
+  }
 }
 
 // --- Visual Rendering Loop ---
@@ -447,12 +467,23 @@ async function handleRecord() {
       get('render-progress-text').textContent = `Extracting waveform data (${Math.round(progress)}%)`;
     });
 
-    console.log('Analysis Complete. Sending to Backend...');
+    console.log('Analysis Complete. Map size:', map.length);
+    console.log('Starting Phase 2: Handshaking with backend...');
     get('render-status-text').textContent = 'Phase 2: Handshaking with Render Server...';
     
+    // Optimize: Convert map to a flat binary array for multi-hour support
+    const numFrames = map.length;
+    const numBins = numFrames > 0 ? (map[0]?.length || 256) : 256;
+    const flatData = new Uint8Array(numFrames * numBins);
+    for (let i = 0; i < numFrames; i++) {
+      const frameData = map[i] || new Array(numBins).fill(0);
+      flatData.set(frameData, i * numBins);
+    }
+
     const fd = new FormData();
     fd.append('audio', audioFile);
-    fd.append('dataMap', JSON.stringify(map));
+    fd.append('dataMap', new Blob([flatData]), 'data.bin');
+    fd.append('numBins', numBins);
     fd.append('config', JSON.stringify({ 
       ...config, 
       vhs: get('vhs-toggle').checked, 
@@ -540,17 +571,23 @@ async function getAudioDataMap(onProgress) {
   const src = oCtx.createBufferSource(); src.buffer = buf;
   const ans = oCtx.createAnalyser(); ans.fftSize = 512;
   src.connect(ans); ans.connect(oCtx.destination);
-  const fps = 60, total = Math.ceil(buf.duration * fps), map = [];
+  const fps = 60, total = Math.ceil(buf.duration * fps), map = new Array(total);
   src.start(0);
+  
+  const analysisPromises = [];
   for (let i = 0; i < total; i++) {
-    await oCtx.suspend(i / fps);
-    const data = new Uint8Array(ans.frequencyBinCount); ans.getByteFrequencyData(data);
-    map.push(Array.from(data)); oCtx.resume();
-    if (i % 50 === 0 && onProgress) {
-      onProgress((i / total) * 100);
-      await new Promise(r => setTimeout(r, 0)); // Give UI thread a break
-    }
+    analysisPromises.push(
+      oCtx.suspend(i / fps).then(() => {
+        const data = new Uint8Array(ans.frequencyBinCount);
+        ans.getByteFrequencyData(data);
+        map[i] = Array.from(data);
+        if (i % 50 === 0 && onProgress) onProgress((i / total) * 100);
+        return oCtx.resume();
+      })
+    );
   }
+
+  await oCtx.startRendering();
   return map;
 }
 
@@ -593,9 +630,12 @@ function showConfirm(title, message, confirmText = 'Confirm', confirmColor = 'va
 
 function setupHeadlessAPI() {
   window.renderFrame = async (idx, data, cfg, time) => {
-    config = { ...config, ...cfg }; dataArray = new Uint8Array(data);
+    config = { ...config, ...cfg }; 
+    // Data is now passed as an array (from the backend reconstruction)
+    dataArray = new Uint8Array(data);
     draw2D(get('visualizer-2d')?.getContext('2d'), get('visualizer-2d'), time);
-    renderUnified(time); return get('visualizer-3d').toDataURL();
+    renderUnified(time); 
+    return get('visualizer-3d').toDataURL('image/jpeg', 0.9);
   };
 }
 

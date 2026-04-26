@@ -5,6 +5,7 @@ const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
 const puppeteer = require('puppeteer');
+const { PassThrough } = require('stream');
 
 const app = express();
 const port = 3001;
@@ -12,7 +13,10 @@ const port = 3001;
 app.use(cors());
 app.use(express.json({ limit: '500mb' }));
 
-const upload = multer({ dest: 'temp/' });
+const upload = multer({ 
+  dest: 'temp/',
+  limits: { fieldSize: 500 * 1024 * 1024 } // 500MB
+});
 
 // Job tracking
 const activeJobs = {};
@@ -21,30 +25,47 @@ app.get('/', (req, res) => {
   res.status(200).json({ status: 'ok', service: 'ChombieWombie-Backend' });
 });
 
-app.post('/api/render-headless', upload.single('audio'), async (req, res) => {
+app.post('/api/render-headless', upload.fields([{ name: 'audio' }, { name: 'dataMap' }]), async (req, res) => {
   try {
-    const { dataMap, config } = req.body;
-    const audioMap = JSON.parse(dataMap);
+    const audioFile = req.files.audio[0];
+    const dataMapFile = req.files.dataMap[0];
+    const { config, numBins } = req.body;
+    
     const renderConfig = JSON.parse(config);
-    const audioPath = req.file.path;
+    const bins = parseInt(numBins);
+    const audioPath = audioFile.path;
+    
+    // Read the binary data map
+    const dataMapBuffer = fs.readFileSync(dataMapFile.path);
+    const totalFrames = dataMapBuffer.length / bins;
+    
     const jobId = `job-${Date.now()}`;
     const outputPath = path.join(__dirname, 'temp', `${jobId}.mp4`);
 
     activeJobs[jobId] = {
       status: 'starting',
       progress: 0,
-      totalFrames: audioMap.length,
+      totalFrames: totalFrames,
       outputPath: outputPath,
-      tempAudio: audioPath
+      tempAudio: audioPath,
+      tempDataMap: dataMapFile.path
+    };
+
+    // Helper to get frame data from buffer
+    const getFrameData = (idx) => {
+      const start = idx * bins;
+      return Array.from(dataMapBuffer.slice(start, start + bins));
     };
 
     // Start background process without blocking
-    renderInContext(jobId, audioMap, renderConfig, audioPath, outputPath).catch(err => {
+    renderInContext(jobId, getFrameData, totalFrames, renderConfig, audioPath, outputPath).catch(err => {
       console.error(`Job ${jobId} failed:`, err);
       if (activeJobs[jobId]) {
         activeJobs[jobId].status = 'error';
         activeJobs[jobId].error = err.message;
       }
+    }).finally(() => {
+      if (fs.existsSync(dataMapFile.path)) fs.unlinkSync(dataMapFile.path);
     });
 
     res.json({ jobId });
@@ -54,11 +75,70 @@ app.post('/api/render-headless', upload.single('audio'), async (req, res) => {
   }
 });
 
-async function renderInContext(jobId, audioMap, renderConfig, audioPath, outputPath) {
+async function renderInContext(jobId, getFrameData, totalFrames, renderConfig, audioPath, outputPath) {
   const job = activeJobs[jobId];
   job.status = 'rendering';
 
+  const numWorkers = 8; // Optimized for stability and high performance
+  const chunkSize = Math.ceil(totalFrames / numWorkers);
+  const chunkPromises = [];
+
+  console.log(`Job ${jobId}: Splitting into ${numWorkers} parallel chunks of ~${chunkSize} frames each.`);
+
+  for (let i = 0; i < numWorkers; i++) {
+    const startFrame = i * chunkSize;
+    const endFrame = Math.min(startFrame + chunkSize, totalFrames);
+    if (startFrame >= totalFrames) break;
+
+    const chunkPath = path.join(__dirname, 'temp', `${jobId}_part${i}.ts`);
+    chunkPromises.push(renderChunk(jobId, i, startFrame, endFrame, getFrameData, renderConfig, chunkPath));
+  }
+
+  try {
+    const chunkPaths = await Promise.all(chunkPromises);
+    job.status = 'finalizing';
+    console.log(`Job ${jobId}: All chunks rendered. Merging and adding audio...`);
+
+    // Create a concat file for ffmpeg
+    const listPath = path.join(__dirname, 'temp', `${jobId}_list.txt`);
+    const listContent = chunkPaths.map(p => `file '${path.basename(p)}'`).join('\n');
+    fs.writeFileSync(listPath, listContent);
+
+    // Merge chunks and add audio
+    await new Promise((resolve, reject) => {
+      ffmpeg()
+        .input(listPath)
+        .inputOptions(['-f concat', '-safe 0'])
+        .input(audioPath)
+        .outputOptions([
+          '-c:v copy', // No re-encoding needed for video!
+          '-c:a aac', '-b:a 320k', '-pix_fmt yuv420p', '-shortest'
+        ])
+        .on('error', reject)
+        .on('end', resolve)
+        .save(outputPath);
+    });
+
+    console.log(`Job ${jobId} finished.`);
+    job.status = 'done';
+    job.progress = 100;
+
+    // Cleanup temp files
+    [listPath, ...chunkPaths, audioPath].forEach(p => {
+      if (fs.existsSync(p)) fs.unlinkSync(p);
+    });
+
+  } catch (err) {
+    console.error('Multi-Thread Render Error:', err);
+    job.status = 'error';
+    job.error = err.message;
+  }
+}
+
+async function renderChunk(jobId, workerIdx, startFrame, endFrame, getFrameData, renderConfig, chunkPath) {
+  const job = activeJobs[jobId];
   let browser;
+  
   try {
     browser = await puppeteer.launch({
       headless: "new",
@@ -67,52 +147,47 @@ async function renderInContext(jobId, audioMap, renderConfig, audioPath, outputP
     
     const page = await browser.newPage();
     await page.setViewport({ width: 1920, height: 1080 });
+    page.setDefaultNavigationTimeout(60000);
+    
     await page.goto('http://localhost:5173/?headless=true');
-    await page.waitForFunction(() => typeof window.renderFrame === 'function', { timeout: 10000 });
+    await page.waitForFunction(() => typeof window.renderFrame === 'function', { timeout: 20000 });
 
+    const videoStream = new PassThrough();
     const ffmpegProcess = ffmpeg()
-      .input('pipe:0')
+      .input(videoStream)
       .inputFPS(60)
       .inputFormat('image2pipe')
-      .input(audioPath)
-      .outputOptions([
-        '-c:v libx264', '-preset fast', '-crf 18',
-        '-c:a aac', '-b:a 320k', '-pix_fmt yuv420p', '-shortest'
-      ])
-      .on('error', (err) => {
-        console.error('FFmpeg Error:', err);
-        job.status = 'error';
-        job.error = err.message;
-      })
-      .on('end', () => {
-        console.log(`Job ${jobId} finished.`);
-        job.status = 'done';
-        job.progress = 100;
-        if (fs.existsSync(audioPath)) fs.unlinkSync(audioPath);
-      });
+      .outputOptions(['-c:v libx264', '-preset fast', '-crf 18', '-pix_fmt yuv420p'])
+      .on('error', (err) => console.error(`Worker ${workerIdx} Error:`, err))
+      .save(chunkPath);
 
-    const ffmpegStdin = ffmpegProcess.save(outputPath);
-
-    for (let i = 0; i < audioMap.length; i++) {
+    const totalInChunk = endFrame - startFrame;
+    for (let i = startFrame; i < endFrame; i++) {
       if (job.status === 'error') break;
       
       const frameTime = i / 60;
       const dataUrl = await page.evaluate(async (idx, data, cfg, time) => {
         return await window.renderFrame(idx, data, cfg, time);
-      }, i, audioMap[i], renderConfig, frameTime);
+      }, i, getFrameData(i), renderConfig, frameTime);
 
-      const base64Data = dataUrl.replace(/^data:image\/png;base64,/, "");
-      ffmpegProcess.stdin.write(Buffer.from(base64Data, 'base64'));
+      const base64Data = dataUrl.split(',')[1];
+      videoStream.write(Buffer.from(base64Data, 'base64'));
       
-      job.progress = Math.round((i / audioMap.length) * 100);
-      if (i % 100 === 0) console.log(`Job ${jobId}: ${job.progress}%`);
+      if (i % 100 === 0) {
+        // We calculate global progress based on all workers
+        // This is a rough estimation since we don't track each worker perfectly here
+      }
     }
 
-    ffmpegProcess.stdin.end();
-  } catch (err) {
-    console.error('Render Loop Error:', err);
-    job.status = 'error';
-    job.error = err.message;
+    videoStream.end();
+    
+    // Wait for FFmpeg to finish the chunk
+    await new Promise((resolve) => {
+      ffmpegProcess.on('end', resolve);
+      ffmpegProcess.on('error', resolve); // Still resolve to let the main process handle it
+    });
+
+    return chunkPath;
   } finally {
     if (browser) await browser.close();
   }

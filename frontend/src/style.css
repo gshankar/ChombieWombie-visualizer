@@ -219,11 +219,26 @@ main {
 
 .error-msg {
   color: #ff3b3b;
-  font-size: 0.85rem;
+  font-size: 0.9rem;
   background: rgba(255, 59, 59, 0.1);
-  padding: 0.8rem 1.5rem;
-  border-radius: 8px;
+  padding: 1rem 1.5rem;
+  border-radius: 12px;
   border: 1px solid rgba(255, 59, 59, 0.2);
+  margin-bottom: 1.5rem;
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  box-shadow: 0 10px 30px rgba(255, 59, 59, 0.1);
+  animation: slideDown 0.3s ease;
+}
+
+.error-msg::before {
+  content: '⚠️';
+}
+
+@keyframes slideDown {
+  from { transform: translateY(-10px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
 }
 
 .loading-overlay, .recording-overlay {
