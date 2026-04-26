@@ -416,7 +416,7 @@ function renderUnified() {
   }
 
   const filtersEnabled = vhsToggle.checked || crtToggle.checked || glitchToggle.checked;
-  const brightnessBoost = filtersEnabled ? 1.8 : 1.0; // Increased boost
+  const brightnessBoost = 1.0;
 
   if (vhsPass) { 
     vhsPass.enabled = vhsToggle.checked; 
@@ -436,8 +436,7 @@ function renderUnified() {
   }
 
   if (bloomPass) {
-    // Bloom now glows off the brightened, filtered image
-    bloomPass.strength = (1.2 + bassIntensity * 0.8) * (filtersEnabled ? 1.5 : 1.0);
+    bloomPass.strength = 1.2 + bassIntensity * 0.8;
   }
 
   renderer.clear();
