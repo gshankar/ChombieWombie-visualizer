@@ -21,7 +21,7 @@ const ctx2d = canvas2d.getContext('2d');
 const canvas3d = document.getElementById('visualizer-3d');
 let scene, camera, renderer, composer;
 let vhsPass, glitchPass, crtPass;
-let sphere, terrain, tunnel;
+let sphere, terrain, tunnel, logoSprite;
 
 // DOM Elements
 const dropZone = document.getElementById('drop-zone');
@@ -66,7 +66,7 @@ let config = { ...DEFAULT_CONFIG };
 function init() {
   updateStyleOptions();
   initThree();
-  resize(); // Call resize after initThree to set correct sizes
+  resize();
 }
 
 function updateStyleOptions() {
@@ -90,6 +90,8 @@ function resize() {
     if (composer) {
       composer.setSize(width, height);
     }
+    // Reposition 3D logo if exists
+    if (logoSprite) updateLogoPosition3D();
   }
 }
 window.addEventListener('resize', resize);
@@ -110,24 +112,21 @@ function initThree() {
   glitchPass = new ShaderPass(GlitchShader); glitchPass.enabled = false; composer.addPass(glitchPass);
   crtPass = new ShaderPass(CRTShader); crtPass.enabled = false; composer.addPass(crtPass);
 
-  // Sphere
   sphere = new THREE.Mesh(
     new THREE.IcosahedronGeometry(1.5, 32),
     new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true })
   );
   scene.add(sphere);
 
-  // Terrain
   terrain = new THREE.Mesh(
-    new THREE.PlaneGeometry(30, 30, 64, 64),
+    new THREE.PlaneGeometry(40, 40, 32, 32),
     new THREE.MeshPhongMaterial({ color: config.colors[1], wireframe: true, side: THREE.DoubleSide })
   );
-  terrain.rotation.x = -Math.PI / 2; terrain.position.y = -2.5;
+  terrain.rotation.x = -Math.PI / 2; terrain.position.y = -3;
   scene.add(terrain);
 
-  // Tunnel
   tunnel = new THREE.Mesh(
-    new THREE.CylinderGeometry(5, 5, 100, 32, 100, true),
+    new THREE.CylinderGeometry(10, 10, 200, 32, 1, true),
     new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true, side: THREE.BackSide })
   );
   tunnel.rotation.x = Math.PI / 2;
@@ -242,7 +241,7 @@ function draw3D() {
   tunnel.visible = config.style === '3d-tunnel';
 
   if (sphere.visible) {
-    sphere.scale.set(1 + bass/255 * 0.3, 1 + bass/255 * 0.3, 1 + bass/255 * 0.3);
+    sphere.scale.set(1 + bass/255 * 0.4, 1 + bass/255 * 0.4, 1 + bass/255 * 0.4);
     sphere.rotation.y += 0.01;
     sphere.material.color.set(config.colors[0]);
   }
@@ -250,17 +249,25 @@ function draw3D() {
   if (terrain.visible) {
     const pos = terrain.geometry.attributes.position.array;
     for (let i = 0; i < pos.length; i += 3) {
-      pos[i+2] = Math.sin(pos[i] * 0.2 + time) * intensity * 2;
+      const x = pos[i]; const y = pos[i+1]; const dist = Math.sqrt(x*x + y*y);
+      pos[i+2] = Math.sin(dist * 0.3 - time * 2) * intensity * 3;
     }
     terrain.geometry.attributes.position.needsUpdate = true;
     terrain.material.color.set(config.colors[1]);
   }
 
   if (tunnel.visible) {
-    tunnel.position.z += 0.2 + (avg / 255);
-    if (tunnel.position.z > 50) tunnel.position.z = 0;
-    tunnel.rotation.z += 0.005;
+    tunnel.rotation.z += 0.01;
+    const s = 1 + (avg / 255) * 0.1; tunnel.scale.set(s, s, 1);
     tunnel.material.color.set(config.colors[0]);
+    camera.position.x = Math.sin(time) * 0.5; camera.position.y = Math.cos(time) * 0.5;
+  } else {
+    camera.position.x = 0; camera.position.y = 0;
+  }
+
+  if (logoSprite) {
+    logoSprite.visible = true;
+    updateLogoPosition3D();
   }
 
   if (vhsPass) vhsPass.enabled = vhsToggle.checked;
@@ -269,9 +276,8 @@ function draw3D() {
 
   composer.render();
   
-  // Clear and overlay branding
+  // Clear 2D overlay so it doesn't duplicate
   ctx2d.clearRect(0, 0, canvas2d.width, canvas2d.height);
-  if (brandImage) drawBranding(ctx2d, canvas2d.width, canvas2d.height);
 }
 
 function drawBranding(ctx, w, h) {
@@ -291,26 +297,41 @@ function drawBranding(ctx, w, h) {
   ctx.drawImage(brandImage, bx, by, bw, bh);
 }
 
+function updateLogoPosition3D() {
+  if (!logoSprite) return;
+  const scale = brandScale.value / 200; // Smaller relative scale for 3D
+  logoSprite.scale.set(scale * (canvas3d.width / canvas3d.height), scale, 1);
+  
+  // Calculate 3D screen coords
+  const padding = 0.8;
+  const aspect = canvas3d.width / canvas3d.height;
+  const hLimit = 2.5 * aspect;
+  const vLimit = 2.5;
+
+  switch(brandPos.value) {
+    case 'top-right': logoSprite.position.set(hLimit - padding, vLimit - padding, 0); break;
+    case 'top-left': logoSprite.position.set(-hLimit + padding, vLimit - padding, 0); break;
+    case 'bottom-right': logoSprite.position.set(hLimit - padding, -vLimit + padding, 0); break;
+    case 'bottom-left': logoSprite.position.set(-hLimit + padding, -vLimit + padding, 0); break;
+    case 'center': logoSprite.position.set(0, 0, 0); break;
+  }
+  logoSprite.position.z = 2; // Keep in front of visualizer
+}
+
 // --- Handlers ---
 
 engineSelect.onchange = (e) => {
   config.engine = e.target.value;
-  
-  // Reset visibility
   canvas2d.classList.add('hidden');
   canvas3d.classList.add('hidden');
-  
   if (config.engine === '2d') {
     canvas2d.classList.remove('hidden');
-    canvas2d.style.pointerEvents = 'auto';
+    if (logoSprite) logoSprite.visible = false;
   } else {
     canvas3d.classList.remove('hidden');
-    // Overlay 2D for branding
-    canvas2d.classList.remove('hidden');
-    canvas2d.style.pointerEvents = 'none';
+    if (logoSprite) logoSprite.visible = true;
   }
-  
-  resize(); // Recalculate sizes when switching engines
+  resize();
   updateStyleOptions();
 };
 
@@ -338,7 +359,7 @@ function handleFile(file) {
       playBtn.disabled = false;
       recordBtn.disabled = false;
       statusBadge.textContent = 'Session Ready: ' + audioFile.name;
-      resize(); // Ensure correct dimensions once visible
+      resize();
     }, 500);
   } else {
     showError('Please upload a valid audio track to begin.');
@@ -367,6 +388,14 @@ function handleBrandFile(file) {
       brandPreview.src = brandImage.src;
       brandPreview.classList.remove('hidden');
       brandBtn.textContent = 'Change Logo';
+      
+      // Update 3D logo sprite
+      const texture = new THREE.TextureLoader().load(brandImage.src);
+      const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
+      if (logoSprite) scene.remove(logoSprite);
+      logoSprite = new THREE.Sprite(material);
+      scene.add(logoSprite);
+      updateLogoPosition3D();
     };
   };
   reader.readAsDataURL(file);

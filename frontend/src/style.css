@@ -101,6 +101,14 @@ main {
   left: 0;
 }
 
+#visualizer-2d {
+  z-index: 10; /* Always on top for branding */
+}
+
+#visualizer-3d {
+  z-index: 5;
+}
+
 .drop-zone {
   position: absolute;
   top: 0;
@@ -366,6 +374,17 @@ select {
   border-radius: 12px;
   border: 1px solid transparent;
   transition: all 0.2s;
+}
+
+.toggle.drop-zone.drag-over {
+  background: rgba(0, 242, 255, 0.05);
+  border: 2px dashed var(--accent-1);
+  border-radius: 30px;
+}
+
+.drop-zone.drag-over .drop-content {
+  transform: scale(1.05);
+  filter: drop-shadow(0 0 30px var(--accent-1));
 }
 
 .toggle-control:hover {
