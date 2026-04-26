@@ -152,12 +152,14 @@ function initThree() {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   
-  bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-  composer.addPass(bloomPass);
-
+  // VHS/CRT/Glitch passes FIRST
   vhsPass = new ShaderPass(VHSShader); vhsPass.enabled = false; composer.addPass(vhsPass);
   glitchPass = new ShaderPass(GlitchShader); glitchPass.enabled = false; composer.addPass(glitchPass);
   crtPass = new ShaderPass(CRTShader); crtPass.enabled = false; composer.addPass(crtPass);
+
+  // Bloom LAST to catch the scanlines and brightened pixels
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+  composer.addPass(bloomPass);
 
   canvasTexture = new THREE.CanvasTexture(canvas2d);
   const planeGeo = new THREE.PlaneGeometry(1, 1);
@@ -414,11 +416,7 @@ function renderUnified() {
   }
 
   const filtersEnabled = vhsToggle.checked || crtToggle.checked || glitchToggle.checked;
-  const brightnessBoost = filtersEnabled ? 1.4 : 1.0;
-
-  if (bloomPass) {
-    bloomPass.strength = (1.0 + bassIntensity * 0.5) * brightnessBoost;
-  }
+  const brightnessBoost = filtersEnabled ? 1.8 : 1.0; // Increased boost
 
   if (vhsPass) { 
     vhsPass.enabled = vhsToggle.checked; 
@@ -435,6 +433,11 @@ function renderUnified() {
     glitchPass.enabled = glitchToggle.checked || (smoothBass > 220); 
     glitchPass.uniforms.time.value = time; 
     glitchPass.uniforms.brightness.value = brightnessBoost;
+  }
+
+  if (bloomPass) {
+    // Bloom now glows off the brightened, filtered image
+    bloomPass.strength = (1.2 + bassIntensity * 0.8) * (filtersEnabled ? 1.5 : 1.0);
   }
 
   renderer.clear();
