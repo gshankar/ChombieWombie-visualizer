@@ -418,17 +418,24 @@ function resize() {
 async function handleRecord() {
   if (!audioFile) return showError('Upload a track first');
   
+  // 1. Show UI Immediately
   get('recording-overlay').classList.remove('hidden');
   get('render-progress-bar').style.width = '0%';
-  get('render-status-text').textContent = 'Phase 1: Analyzing Audio...';
-  
+  get('render-status-text').textContent = 'Phase 1: Preparing Mac Studio Engine...';
+  get('render-progress-text').textContent = 'Analyzing frequency map...';
+
+  // 2. Wait for UI to render before starting heavy task
+  await new Promise(r => setTimeout(r, 100));
+
   try {
+    console.log('Starting Audio Analysis...');
     const map = await getAudioDataMap((progress) => {
-      get('render-progress-bar').style.width = `${progress * 0.2}%`; // Analysis is first 20%
-      get('render-progress-text').textContent = `Analyzing frequencies (${Math.round(progress)}%)`;
+      get('render-progress-bar').style.width = `${progress * 0.15}%`; // Analysis is first 15%
+      get('render-progress-text').textContent = `Extracting waveform data (${Math.round(progress)}%)`;
     });
 
-    get('render-status-text').textContent = 'Phase 2: Initializing Headless Render...';
+    console.log('Analysis Complete. Sending to Backend...');
+    get('render-status-text').textContent = 'Phase 2: Handshaking with Render Server...';
     
     const fd = new FormData();
     fd.append('audio', audioFile);
@@ -496,7 +503,10 @@ async function getAudioDataMap(onProgress) {
     await oCtx.suspend(i / fps);
     const data = new Uint8Array(ans.frequencyBinCount); ans.getByteFrequencyData(data);
     map.push(Array.from(data)); oCtx.resume();
-    if (i % 100 === 0 && onProgress) onProgress((i / total) * 100);
+    if (i % 50 === 0 && onProgress) {
+      onProgress((i / total) * 100);
+      await new Promise(r => setTimeout(r, 0)); // Give UI thread a break
+    }
   }
   return map;
 }
