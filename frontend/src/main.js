@@ -14,6 +14,8 @@ let brandImage = null;
 let hueOffset = 0;
 let cycleInterval = null;
 let smoothAvg = 0, smoothBass = 0;
+let lastStyleCycleTime = 0;
+let nextStyleCycleInterval = 30; // seconds
 
 // Visual States
 let bouncingCubeState = { pos: new THREE.Vector3(0,0,0), vel: new THREE.Vector3(0.08, 0.06, 0.04) };
@@ -209,6 +211,18 @@ function draw() {
   if (get('color-cycle-toggle')?.checked) { 
     hueOffset = (hueOffset + 0.5) % 360; 
     config.colors = [`hsl(${hueOffset}, 100%, 50%)`, `hsl(${(hueOffset + 60) % 360}, 100%, 50%)` ]; 
+  }
+
+  // Random Visual Cycling Logic
+  if (get('cycle-toggle')?.checked && time - lastStyleCycleTime > nextStyleCycleInterval) {
+    const enabled = Array.from(document.querySelectorAll('.cycle-style:checked')).map(el => el.value);
+    if (enabled.length > 0) {
+      const randomStyle = enabled[Math.floor(Math.random() * enabled.length)];
+      config.style = randomStyle;
+      get('style-select').value = randomStyle;
+      lastStyleCycleTime = time;
+      nextStyleCycleInterval = 30 + Math.random() * 90; // Random interval between 30s and 120s
+    }
   }
   
   draw2D(ctx, c2, time); 
