@@ -28,11 +28,13 @@ export const VHSShader = {
       float g = texture2D(tDiffuse, uv).g;
       float b = texture2D(tDiffuse, uv - vec2(d, 0.0)).b;
       
-      // Subtle Scanlines (Less darkening)
-      float scanline = sin(uv.y * 800.0 + time * 10.0) * 0.02;
+      // ADDITIVE Scanlines (Adds glow instead of darkening)
+      float scanline = sin(uv.y * 800.0 + time * 10.0) * 0.05;
       
-      vec4 color = vec4(r - scanline, g - scanline, b - scanline, 1.0);
-      gl_FragColor = color * brightness;
+      vec3 color = vec3(r, g, b);
+      color += scanline * 0.1; // Additive glow
+      
+      gl_FragColor = vec4(color * brightness, 1.0);
     }
   `
 };
@@ -97,7 +99,7 @@ export const CRTShader = {
       
       // Curvature
       vec2 dc = uv - 0.5;
-      uv = uv + dc * dot(dc, dc) * 0.05; // Reduced curvature
+      uv = uv + dc * dot(dc, dc) * 0.05;
       
       if (uv.y > 1.0 || uv.x > 1.0 || uv.x < 0.0 || uv.y < 0.0) {
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -106,12 +108,12 @@ export const CRTShader = {
 
       vec4 color = texture2D(tDiffuse, uv);
       
-      // Scanlines (Subtle)
-      float s = sin(uv.y * 1200.0) * 0.03;
-      color.rgb -= s;
+      // ADDITIVE Scanlines (Less darkening)
+      float s = sin(uv.y * 1200.0) * 0.05;
+      color.rgb += s * 0.1; // Glow instead of shadow
       
-      // Subtle Vignette
-      float v = 1.0 - dot(dc, dc) * 0.8;
+      // Very subtle Vignette (Minimal darkening)
+      float v = 1.0 - dot(dc, dc) * 0.3;
       color.rgb *= v;
       
       gl_FragColor = color * brightness;

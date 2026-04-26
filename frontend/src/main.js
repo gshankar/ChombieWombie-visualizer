@@ -414,13 +414,28 @@ function renderUnified() {
   }
 
   const filtersEnabled = vhsToggle.checked || crtToggle.checked || glitchToggle.checked;
+  const brightnessBoost = filtersEnabled ? 1.4 : 1.0;
+
   if (bloomPass) {
-    const boost = filtersEnabled ? 0.5 : 0;
-    bloomPass.strength = 1.0 + boost + bassIntensity * 0.5;
+    bloomPass.strength = (1.0 + bassIntensity * 0.5) * brightnessBoost;
   }
-  if (vhsPass) { vhsPass.enabled = vhsToggle.checked; vhsPass.uniforms.time.value = time; vhsPass.uniforms.amount.value = 0.5 + intensity * 0.2; }
-  if (crtPass) { crtPass.enabled = crtToggle.checked; crtPass.uniforms.time.value = time; }
-  if (glitchPass) { glitchPass.enabled = glitchToggle.checked || (smoothBass > 220); glitchPass.uniforms.time.value = time; }
+
+  if (vhsPass) { 
+    vhsPass.enabled = vhsToggle.checked; 
+    vhsPass.uniforms.time.value = time; 
+    vhsPass.uniforms.amount.value = 0.5 + intensity * 0.2; 
+    vhsPass.uniforms.brightness.value = brightnessBoost;
+  }
+  if (crtPass) { 
+    crtPass.enabled = crtToggle.checked; 
+    crtPass.uniforms.time.value = time; 
+    crtPass.uniforms.brightness.value = brightnessBoost;
+  }
+  if (glitchPass) { 
+    glitchPass.enabled = glitchToggle.checked || (smoothBass > 220); 
+    glitchPass.uniforms.time.value = time; 
+    glitchPass.uniforms.brightness.value = brightnessBoost;
+  }
 
   renderer.clear();
   composer.render();
