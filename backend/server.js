@@ -130,6 +130,18 @@ app.get('/api/render-download/:jobId', (req, res) => {
   res.download(job.outputPath, 'ChombieWombie-Studio-Render.mp4');
 });
 
+app.post('/api/reset', (req, res) => {
+  console.log('Resetting Studio Engine...');
+  // Clear jobs
+  Object.keys(activeJobs).forEach(id => delete activeJobs[id]);
+  // Clear temp folder
+  const tempDir = path.join(__dirname, 'temp');
+  if (fs.existsSync(tempDir)) {
+    fs.readdirSync(tempDir).forEach(f => fs.unlinkSync(path.join(tempDir, f)));
+  }
+  res.json({ status: 'ok', message: 'Studio Engine Reset Successful' });
+});
+
 // Real-time fallback
 app.post('/api/encode', upload.single('video'), (req, res) => {
   if (!req.file) return res.status(400).send('No video file uploaded.');

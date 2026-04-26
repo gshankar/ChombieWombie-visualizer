@@ -145,6 +145,8 @@ function attachEventListeners() {
   if (pb) pb.onclick = handlePlay;
   if (sp) sp.onclick = stopPreview;
   if (rb) rb.onclick = handleRecord;
+  const reb = get('reset-engine-btn');
+  if (reb) reb.onclick = handleResetBackend;
 
   document.querySelectorAll('.palette').forEach(p => {
     p.onclick = () => {
@@ -487,6 +489,31 @@ async function handleRecord() {
   } catch (err) {
     showError(`Studio Render Error: ${err.message}`);
     get('recording-overlay').classList.add('hidden');
+  }
+}
+
+async function handleResetBackend() {
+  const btn = get('reset-engine-btn');
+  const originalText = btn.textContent;
+  
+  if (!confirm('Are you sure you want to reset the Studio Engine? This will clear all active render jobs.')) {
+    return;
+  }
+
+  btn.disabled = true;
+  btn.textContent = 'Resetting...';
+
+  try {
+    const res = await fetch('http://localhost:3001/api/reset', { method: 'POST' });
+    if (!res.ok) throw new Error('Reset failed');
+    
+    const data = await res.json();
+    alert(data.message || 'Studio Engine Reset Successful');
+  } catch (err) {
+    showError(`Reset Error: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = originalText;
   }
 }
 
