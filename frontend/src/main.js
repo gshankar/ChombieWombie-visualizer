@@ -13,6 +13,7 @@ let recordedChunks = [];
 let audioFile, audioSource;
 let brandImage = null;
 let hueOffset = 0;
+let cycleInterval = null;
 
 // Dual Engine Support
 const canvas2d = document.getElementById('visualizer-2d');
@@ -36,6 +37,9 @@ const palettes = document.querySelectorAll('.palette');
 const recordingOverlay = document.getElementById('recording-overlay');
 const sensitivitySlider = document.getElementById('sensitivity');
 const colorCycleToggle = document.getElementById('color-cycle-toggle');
+const cycleToggle = document.getElementById('cycle-toggle');
+const cycleSelection = document.getElementById('cycle-selection');
+const cycleStyleCheckboxes = document.querySelectorAll('.cycle-style');
 
 // Branding
 const brandBtn = document.getElementById('brand-btn');
@@ -89,20 +93,17 @@ function initThree() {
   glitchPass = new ShaderPass(GlitchShader); glitchPass.enabled = false; composer.addPass(glitchPass);
   crtPass = new ShaderPass(CRTShader); crtPass.enabled = false; composer.addPass(crtPass);
 
-  // Simple 3D Sphere
   const geo = new THREE.IcosahedronGeometry(1.5, 32);
   const mat = new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true });
   sphere = new THREE.Mesh(geo, mat);
   scene.add(sphere);
 
-  // Terrain
   const tGeo = new THREE.PlaneGeometry(20, 20, 50, 50);
   const tMat = new THREE.MeshPhongMaterial({ color: config.colors[1], wireframe: true, side: THREE.DoubleSide });
   terrain = new THREE.Mesh(tGeo, tMat);
   terrain.rotation.x = -Math.PI / 2; terrain.position.y = -2;
   scene.add(terrain);
 
-  // Lights
   scene.add(new THREE.AmbientLight(0xffffff, 0.5));
   const p = new THREE.PointLight(0xffffff, 1); p.position.set(5, 5, 5); scene.add(p);
 }
@@ -263,7 +264,6 @@ engineSelect.onchange = (e) => {
 styleSelect.onchange = (e) => config.style = e.target.value;
 sensitivitySlider.oninput = (e) => config.sensitivity = e.target.value;
 
-// Drag & Drop
 dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
 dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
 dropZone.ondrop = (e) => {
@@ -321,24 +321,42 @@ palettes.forEach(p => {
     palettes.forEach(btn => btn.classList.remove('active'));
     p.classList.add('active');
     config.colors = p.dataset.colors.split(',');
-    colorCycleToggle.checked = false; // Disable cycle if manual selected
+    colorCycleToggle.checked = false;
   };
 });
+
+cycleToggle.onchange = () => {
+  if (cycleToggle.checked) {
+    cycleSelection.classList.remove('hidden');
+    cycleInterval = setInterval(() => {
+      const checkedStyles = Array.from(cycleStyleCheckboxes)
+        .filter(cb => cb.checked)
+        .map(cb => cb.value);
+      
+      if (checkedStyles.length > 0) {
+        const currentIndex = checkedStyles.indexOf(config.style);
+        const nextStyle = checkedStyles[(currentIndex + 1) % checkedStyles.length];
+        config.style = nextStyle;
+        styleSelect.value = nextStyle;
+      }
+    }, 5000);
+  } else {
+    cycleSelection.classList.add('hidden');
+    clearInterval(cycleInterval);
+  }
+};
 
 recordBtn.onclick = async () => {
   const source = await setupAudio();
   const dest = audioContext.createMediaStreamDestination();
   analyser.connect(dest);
-  
   const activeCanvas = config.engine === '2d' ? canvas2d : canvas3d;
   const canvasStream = activeCanvas.captureStream(60);
   const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
-  
   mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 12000000 });
   recordedChunks = [];
   mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
   mediaRecorder.onstop = exportVideo;
-  
   recordingOverlay.style.display = 'flex';
   source.start(0);
   mediaRecorder.start();
