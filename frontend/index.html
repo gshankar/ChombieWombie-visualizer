@@ -21,8 +21,8 @@
 
       <main>
         <div class="visualizer-container">
-          <canvas id="visualizer-2d"></canvas>
-          <canvas id="visualizer-3d" class="hidden"></canvas>
+          <canvas id="visualizer-2d" class="hidden"></canvas>
+          <canvas id="visualizer-3d"></canvas>
           <div class="drop-zone" id="drop-zone">
             <div class="drop-content">
               <div class="icon">🚀</div>
@@ -107,9 +107,9 @@
             </div>
           </div>
 
-          <div class="control-group">
-            <label>Branding (Watermark)</label>
-            <div id="brand-drop-zone" class="mini-drop-zone">
+          <div class="control-group" id="branding-group" style="display: none;">
+            <label>Session Branding</label>
+            <div id="brand-drop-zone" class="drop-zone mini">
               <img id="brand-preview" class="hidden" alt="Logo Preview" />
               <button class="btn-secondary" id="brand-btn">Upload Logo</button>
               <p class="hint">or drag & drop</p>

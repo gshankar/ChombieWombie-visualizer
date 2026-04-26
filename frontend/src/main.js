@@ -5,7 +5,7 @@ import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { VHSShader, GlitchShader, CRTShader } from './shaders.js'
-import { STYLES, DEFAULT_CONFIG } from './config.js'
+import { STYLES, DEFAULT_CONFIG, FEATURE_FLAGS } from './config.js'
 
 // State management
 let audioContext, analyser, source, dataArray, animationId, mediaRecorder;
@@ -19,13 +19,16 @@ let cycleInterval = null;
 let smoothAvg = 0;
 let smoothBass = 0;
 
-// Dual Engine Support
-const canvas2d = document.getElementById('visualizer-2d');
+// Unified Rendering Pipeline
+const canvas2d = document.getElementById('visualizer-2d'); 
 const ctx2d = canvas2d.getContext('2d');
 const canvas3d = document.getElementById('visualizer-3d');
+
 let scene, camera, renderer, composer;
+let brandingScene, brandingCamera; 
 let vhsPass, glitchPass, crtPass;
 let sphere, terrain, tunnel, stars, logoSprite;
+let canvasPlane, canvasTexture;
 
 // DOM Elements
 const dropZone = document.getElementById('drop-zone');
@@ -72,6 +75,12 @@ function init() {
   updateCycleOptions();
   initThree();
   resize();
+  
+  // Respect Feature Flags
+  if (!FEATURE_FLAGS.enableBranding) {
+    const brandingGroup = document.getElementById('branding-group') || document.querySelector('.control-group:last-child');
+    if (brandingGroup) brandingGroup.style.display = 'none';
+  }
 }
 
 function updateStyleOptions() {
@@ -86,7 +95,7 @@ function updateCycleOptions() {
 }
 
 function resize() {
-  const container = canvas2d.parentElement;
+  const container = canvas3d.parentElement;
   const width = container.offsetWidth;
   const height = container.offsetHeight;
 
@@ -96,8 +105,16 @@ function resize() {
   if (renderer) {
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
+    
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    
+    brandingCamera.left = -width / 2;
+    brandingCamera.right = width / 2;
+    brandingCamera.top = height / 2;
+    brandingCamera.bottom = -height / 2;
+    brandingCamera.updateProjectionMatrix();
+
     if (composer) composer.setSize(width, height);
     if (logoSprite) updateLogoPosition3D();
   }
@@ -109,15 +126,29 @@ function initThree() {
   camera = new THREE.PerspectiveCamera(75, 1, 0.1, 2000);
   camera.position.z = 10;
 
+  brandingScene = new THREE.Scene();
+  brandingCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
+  brandingCamera.position.z = 10;
+
   renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+  renderer.autoClear = false;
+
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
+  
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
   composer.addPass(bloomPass);
 
   vhsPass = new ShaderPass(VHSShader); vhsPass.enabled = false; composer.addPass(vhsPass);
   glitchPass = new ShaderPass(GlitchShader); glitchPass.enabled = false; composer.addPass(glitchPass);
   crtPass = new ShaderPass(CRTShader); crtPass.enabled = false; composer.addPass(crtPass);
+
+  canvasTexture = new THREE.CanvasTexture(canvas2d);
+  const planeGeo = new THREE.PlaneGeometry(1, 1);
+  const planeMat = new THREE.MeshBasicMaterial({ map: canvasTexture, transparent: true });
+  canvasPlane = new THREE.Mesh(planeGeo, planeMat);
+  canvasPlane.position.z = 5;
+  scene.add(canvasPlane);
 
   sphere = new THREE.Mesh(new THREE.IcosahedronGeometry(2.5, 32), new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true }));
   scene.add(sphere);
@@ -126,7 +157,6 @@ function initThree() {
   terrain.rotation.x = -Math.PI / 2; terrain.position.y = -8;
   scene.add(terrain);
 
-  // Massive Tunnel to avoid bleeding
   tunnel = new THREE.Mesh(new THREE.CylinderGeometry(20, 20, 1000, 32, 1, true), new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true, side: THREE.BackSide }));
   tunnel.rotation.x = Math.PI / 2;
   scene.add(tunnel);
@@ -167,13 +197,9 @@ function draw() {
   animationId = requestAnimationFrame(draw);
   if (analyser) {
     analyser.getByteFrequencyData(dataArray);
-    
-    // Better synchronization: Average multiple bins
     const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
     const bassRange = dataArray.slice(0, 10);
     const bass = bassRange.reduce((a, b) => a + b) / bassRange.length;
-    
-    // Smoothing logic (lerp)
     smoothAvg += (avg - smoothAvg) * 0.15;
     smoothBass += (bass - smoothBass) * 0.15;
   }
@@ -183,16 +209,17 @@ function draw() {
     config.colors = [`hsl(${hueOffset}, 100%, 50%)`, `hsl(${(hueOffset + 60) % 360}, 100%, 50%)` ];
   }
 
-  if (config.engine === '2d') draw2D(); else draw3D();
+  draw2D();
+  renderUnified();
 }
 
 function draw2D() {
   const w = canvas2d.width; const h = canvas2d.height;
   ctx2d.clearRect(0, 0, w, h);
-  const bars = dataArray.length; const cx = w / 2; const cy = h / 2; const r = Math.min(w, h) / 4; const sens = config.sensitivity;
-  ctx2d.strokeStyle = config.colors[0]; ctx2d.lineWidth = 3; ctx2d.lineCap = 'round';
+  if (config.engine !== '2d') return; 
 
-  const val = (smoothAvg / 255) * r * (sens / 5);
+  const bars = dataArray.length; const cx = w / 2; const cy = h / 2; const r = Math.min(w, h) / 4; const sens = config.sensitivity;
+  ctx2d.strokeStyle = config.colors[0]; ctx2d.lineWidth = 3 * window.devicePixelRatio; ctx2d.lineCap = 'round';
 
   if (config.style.startsWith('circular')) {
     for (let i = 0; i < bars; i++) {
@@ -232,18 +259,27 @@ function draw2D() {
     }
     ctx2d.stroke();
   }
-  if (brandImage) drawBranding(ctx2d, w, h);
 }
 
-function draw3D() {
+function renderUnified() {
   const time = performance.now() * 0.001;
   const intensity = (smoothAvg / 255) * config.sensitivity;
   const bassIntensity = (smoothBass / 255) * config.sensitivity;
 
-  sphere.visible = config.style === '3d-sphere';
-  terrain.visible = config.style === '3d-terrain';
-  tunnel.visible = config.style === '3d-tunnel';
-  stars.visible = config.style === '3d-stars';
+  const is3D = config.engine === '3d';
+  sphere.visible = is3D && config.style === '3d-sphere';
+  terrain.visible = is3D && config.style === '3d-terrain';
+  tunnel.visible = is3D && config.style === '3d-tunnel';
+  stars.visible = is3D && config.style === '3d-stars';
+  canvasPlane.visible = !is3D;
+
+  if (canvasPlane.visible) {
+    canvasTexture.needsUpdate = true;
+    const distance = Math.abs(camera.position.z - canvasPlane.position.z);
+    const vFov = (camera.fov * Math.PI) / 180;
+    const h = 2 * Math.tan(vFov / 2) * distance;
+    canvasPlane.scale.set(h * camera.aspect, h, 1);
+  }
 
   if (sphere.visible) {
     const s = 1 + bassIntensity * 0.2;
@@ -264,68 +300,50 @@ function draw3D() {
     const s = 1 + intensity * 0.05; tunnel.scale.set(s, s, 1);
     tunnel.material.color.set(config.colors[0]);
     camera.position.x = Math.sin(time) * 1.5; camera.position.y = Math.cos(time) * 1.5;
-  } else {
+  } else if (!is3D) {
     camera.position.x = 0; camera.position.y = 0;
   }
   if (stars.visible) {
     const pos = stars.geometry.attributes.position.array;
-    const speed = 0.1 + intensity * 0.4; // Significantly slower base and peak speed
+    const speed = 0.1 + intensity * 0.4;
     for (let i = 0; i < pos.length; i += 3) {
       pos[i+2] += speed;
-      if (pos[i+2] > 50) pos[i+2] = -150; // Reset much further back for more depth
+      if (pos[i+2] > 100) pos[i+2] = -100;
     }
     stars.geometry.attributes.position.needsUpdate = true;
     stars.material.color.set(config.colors[0]);
     stars.material.size = 0.1 + intensity * 0.1;
   }
 
-  if (logoSprite) { logoSprite.visible = true; updateLogoPosition3D(); }
-  if (vhsPass) vhsPass.enabled = vhsToggle.checked;
-  if (crtPass) crtPass.enabled = crtToggle.checked;
-  if (glitchPass) glitchPass.enabled = glitchToggle.checked;
+  if (vhsPass) { vhsPass.enabled = vhsToggle.checked; vhsPass.uniforms.time.value = time; }
+  if (crtPass) { crtPass.enabled = crtToggle.checked; crtPass.uniforms.time.value = time; }
+  if (glitchPass) { glitchPass.enabled = glitchToggle.checked; glitchPass.uniforms.time.value = time; }
 
+  renderer.clear();
   composer.render();
-  ctx2d.clearRect(0, 0, canvas2d.width, canvas2d.height);
-}
 
-function drawBranding(ctx, w, h) {
-  const scale = brandScale.value / 100;
-  const bw = brandImage.width * scale; const bh = brandImage.height * scale;
-  const padding = 40; let bx, by;
-  switch(brandPos.value) {
-    case 'top-right': bx = w - bw - padding; by = padding; break;
-    case 'top-left': bx = padding; by = padding; break;
-    case 'bottom-right': bx = w - bw - padding; by = h - bh - padding; break;
-    case 'bottom-left': bx = padding; by = h - bh - padding; break;
-    case 'center': bx = (w - bw) / 2; by = (h - bh) / 2; break;
+  // Conditional Branding Render
+  if (FEATURE_FLAGS.enableBranding && logoSprite && brandImage) {
+    logoSprite.visible = true;
+    updateLogoPosition3D();
+    renderer.render(brandingScene, brandingCamera);
   }
-  ctx.drawImage(brandImage, bx, by, bw, bh);
 }
 
 function updateLogoPosition3D() {
   if (!logoSprite || !brandImage) return;
   const logoAspect = brandImage.width / brandImage.height;
-  
-  // Calculate size in 3D world space at distance (camera.z - sprite.z)
-  const spriteZ = 5;
-  const distance = Math.abs(camera.position.z - spriteZ);
-  const vFov = (camera.fov * Math.PI) / 180;
-  const screenHeightAtZ = 2 * Math.tan(vFov / 2) * distance;
-  const screenWidthAtZ = screenHeightAtZ * camera.aspect;
-
-  const baseScale = (brandScale.value / 100) * (screenHeightAtZ * 0.3); // Scale relative to screen height
+  const width = canvas3d.width / window.devicePixelRatio;
+  const height = canvas3d.height / window.devicePixelRatio;
+  const baseScale = (brandScale.value / 100) * (height * 0.3);
   logoSprite.scale.set(baseScale * logoAspect, baseScale, 1);
-  
-  const hLimit = screenWidthAtZ / 2;
-  const vLimit = screenHeightAtZ / 2;
-  const padding = baseScale * 0.5;
-
+  const hLimit = width / 2; const vLimit = height / 2; const padding = baseScale * 0.5 + 40;
   switch(brandPos.value) {
-    case 'top-right': logoSprite.position.set(hLimit - padding, vLimit - padding, spriteZ); break;
-    case 'top-left': logoSprite.position.set(-hLimit + padding, vLimit - padding, spriteZ); break;
-    case 'bottom-right': logoSprite.position.set(hLimit - padding, -vLimit + padding, spriteZ); break;
-    case 'bottom-left': logoSprite.position.set(-hLimit + padding, -vLimit + padding, spriteZ); break;
-    case 'center': logoSprite.position.set(0, 0, spriteZ); break;
+    case 'top-right': logoSprite.position.set(hLimit - padding, vLimit - padding, 0); break;
+    case 'top-left': logoSprite.position.set(-hLimit + padding, vLimit - padding, 0); break;
+    case 'bottom-right': logoSprite.position.set(hLimit - padding, -vLimit + padding, 0); break;
+    case 'bottom-left': logoSprite.position.set(-hLimit + padding, -vLimit + padding, 0); break;
+    case 'center': logoSprite.position.set(0, 0, 0); break;
   }
 }
 
@@ -333,13 +351,7 @@ function updateLogoPosition3D() {
 
 engineSelect.onchange = (e) => {
   config.engine = e.target.value;
-  canvas2d.classList.add('hidden'); canvas3d.classList.add('hidden');
-  if (config.engine === '2d') {
-    canvas2d.classList.remove('hidden'); if (logoSprite) logoSprite.visible = false;
-  } else {
-    canvas3d.classList.remove('hidden'); if (logoSprite) logoSprite.visible = true;
-  }
-  resize(); updateStyleOptions(); updateCycleOptions();
+  updateStyleOptions(); updateCycleOptions();
 };
 
 styleSelect.onchange = (e) => config.style = e.target.value;
@@ -390,8 +402,8 @@ function handleBrandFile(file) {
       brandPreview.classList.remove('hidden'); brandBtn.textContent = 'Change Logo';
       const texture = new THREE.TextureLoader().load(brandImage.src);
       const material = new THREE.SpriteMaterial({ map: texture, transparent: true });
-      if (logoSprite) scene.remove(logoSprite);
-      logoSprite = new THREE.Sprite(material); scene.add(logoSprite); updateLogoPosition3D();
+      if (logoSprite) brandingScene.remove(logoSprite);
+      logoSprite = new THREE.Sprite(material); brandingScene.add(logoSprite); updateLogoPosition3D();
     };
   };
   reader.readAsDataURL(file);
@@ -454,8 +466,7 @@ recordBtn.onclick = async () => {
   try {
     const source = await setupAudio();
     const dest = audioContext.createMediaStreamDestination(); analyser.connect(dest);
-    const activeCanvas = config.engine === '2d' ? canvas2d : canvas3d;
-    const canvasStream = activeCanvas.captureStream(60);
+    const canvasStream = canvas3d.captureStream(60);
     const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
     mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 12000000 });
     recordedChunks = []; mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);

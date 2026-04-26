@@ -1,3 +1,7 @@
+export const FEATURE_FLAGS = {
+  enableBranding: false
+};
+
 export const STYLES = {
   '2d': [
     { id: 'circular', name: 'Circular Out' },
