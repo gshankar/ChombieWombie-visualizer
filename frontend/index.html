@@ -37,6 +37,7 @@
                 <div class="slot-icon">🎵</div>
                 <button class="btn-primary" id="track-btn">Upload Track</button>
                 <span class="slot-status">Waiting...</span>
+                <a href="#" id="load-test-btn" style="font-size: 0.7rem; color: var(--accent-1); margin-top: 0.5rem; text-decoration: none; opacity: 0.7;">Load Test Track</a>
               </div>
             </div>
 
@@ -184,6 +185,20 @@
         <p id="render-progress-text">Initializing Mac Studio Engine...</p>
       </div>
     </div>
+
+    <!-- Custom Modal -->
+    <div class="modal-overlay hidden" id="confirm-modal">
+      <div class="modal-content">
+        <div class="modal-icon">⚠️</div>
+        <h2 id="modal-title">Reset Studio Engine?</h2>
+        <p id="modal-message">This will clear all active render jobs and temporary files. This action cannot be undone.</p>
+        <div class="modal-actions">
+          <button class="btn-secondary" id="modal-cancel">Cancel</button>
+          <button class="btn-primary" id="modal-confirm" style="background: #ff3b3b; color: white;">Reset Engine</button>
+        </div>
+      </div>
+    </div>
+
     <script type="module" src="/src/main.js"></script>
 </body>
 

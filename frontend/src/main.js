@@ -418,13 +418,24 @@ function resize() {
 // --- Headless / Studio Render ---
 
 async function handleRecord() {
-  if (!audioFile) return showError('Upload a track first');
+  console.log('Record button clicked');
+  if (!audioFile) {
+    console.warn('No audio file uploaded');
+    return showError('Upload a track first');
+  }
   
+  console.log('Starting record flow for:', audioFile.name);
   // 1. Show UI Immediately
-  get('recording-overlay').classList.remove('hidden');
-  get('render-progress-bar').style.width = '0%';
-  get('render-status-text').textContent = 'Phase 1: Preparing Mac Studio Engine...';
-  get('render-progress-text').textContent = 'Analyzing frequency map...';
+  const overlay = get('recording-overlay');
+  if (overlay) {
+    overlay.classList.remove('hidden');
+    get('render-progress-bar').style.width = '0%';
+    get('render-status-text').textContent = 'Phase 1: Preparing Mac Studio Engine...';
+    get('render-progress-text').textContent = 'Analyzing frequency map...';
+    console.log('Recording overlay shown and initialized');
+  } else {
+    console.error('Recording overlay NOT found!');
+  }
 
   // 2. Wait for UI to render before starting heavy task
   await new Promise(r => setTimeout(r, 100));
@@ -496,9 +507,14 @@ async function handleResetBackend() {
   const btn = get('reset-engine-btn');
   const originalText = btn.textContent;
   
-  if (!confirm('Are you sure you want to reset the Studio Engine? This will clear all active render jobs.')) {
-    return;
-  }
+  const confirmed = await showConfirm(
+    'Reset Studio Engine?',
+    'This will clear all active render jobs and temporary files. This action cannot be undone.',
+    'Reset Engine',
+    '#ff3b3b'
+  );
+
+  if (!confirmed) return;
 
   btn.disabled = true;
   btn.textContent = 'Resetting...';
@@ -536,6 +552,43 @@ async function getAudioDataMap(onProgress) {
     }
   }
   return map;
+}
+
+function showConfirm(title, message, confirmText = 'Confirm', confirmColor = 'var(--accent-1)') {
+  return new Promise((resolve) => {
+    const modal = get('confirm-modal');
+    const titleEl = get('modal-title');
+    const msgEl = get('modal-message');
+    const confirmBtn = get('modal-confirm');
+    const cancelBtn = get('modal-cancel');
+
+    if (!modal || !titleEl || !msgEl || !confirmBtn || !cancelBtn) {
+      resolve(confirm(message));
+      return;
+    }
+
+    titleEl.textContent = title;
+    msgEl.textContent = message;
+    confirmBtn.textContent = confirmText;
+    confirmBtn.style.backgroundColor = confirmColor;
+
+    modal.classList.remove('hidden');
+
+    const cleanup = (value) => {
+      modal.classList.add('hidden');
+      confirmBtn.onclick = null;
+      cancelBtn.onclick = null;
+      resolve(value);
+    };
+
+    confirmBtn.onclick = () => cleanup(true);
+    cancelBtn.onclick = () => cleanup(false);
+    
+    // Close on overlay click
+    modal.onclick = (e) => {
+      if (e.target === modal) cleanup(false);
+    };
+  });
 }
 
 function setupHeadlessAPI() {
