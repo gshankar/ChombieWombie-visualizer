@@ -247,8 +247,12 @@ function drawBranding(ctx, w, h) {
 }
 
 function updateLogoPosition3D() {
-  if (!logoSprite) return;
-  const scale = brandScale.value / 200; logoSprite.scale.set(scale * (canvas3d.width / canvas3d.height), scale, 1);
+  if (!logoSprite || !brandImage) return;
+  const logoAspect = brandImage.width / brandImage.height;
+  const baseScale = brandScale.value / 300; 
+  // Preserve logo aspect ratio while scaling within the 3D scene
+  logoSprite.scale.set(baseScale * logoAspect, baseScale, 1);
+  
   const padding = 0.8; const aspect = canvas3d.width / canvas3d.height;
   const hLimit = 2.5 * aspect; const vLimit = 2.5;
   switch(brandPos.value) {
@@ -354,6 +358,7 @@ function stopPreview() {
   cancelAnimationFrame(animationId);
   playBtn.disabled = false; stopPreviewBtn.disabled = true; engineSelect.disabled = false;
   statusBadge.textContent = 'Stopped';
+  dropZone.classList.remove('hidden'); // Show dropzone again when stopped
 }
 
 palettes.forEach(p => {
@@ -413,6 +418,7 @@ async function exportVideo() {
   } catch (err) { console.error(err); }
   recordingOverlay.style.display = 'none';
   statusBadge.textContent = 'Exported';
+  dropZone.classList.remove('hidden');
 }
 
 init();
