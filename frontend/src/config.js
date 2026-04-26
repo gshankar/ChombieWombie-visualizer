@@ -8,14 +8,17 @@ export const STYLES = {
     { id: 'circular-inner', name: 'Circular In' },
     { id: 'circular-dual', name: 'Circular Dual' },
     { id: 'sunrise', name: 'Neon Sunrise' },
-    { id: 'bars', name: 'Linear Bars' },
-    { id: 'wave', name: 'Oscilloscope' }
+    { id: 'mystify', name: 'Neon Mystify' },
+    { id: 'plasma', name: 'Cyber Plasma' },
+    { id: 'bars', name: 'Linear Bars' }
   ],
   '3d': [
     { id: '3d-sphere', name: 'Neon Sphere' },
     { id: '3d-terrain', name: 'Grid Terrain' },
     { id: '3d-tunnel', name: 'Warp Tunnel' },
-    { id: '3d-stars', name: 'Cyber Starfield' }
+    { id: '3d-stars', name: 'Cyber Starfield' },
+    { id: '3d-cube', name: 'Bouncing Cube' },
+    { id: '3d-city', name: 'Grid Runner' }
   ]
 };
 

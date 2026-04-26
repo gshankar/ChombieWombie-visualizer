@@ -19,6 +19,13 @@ let cycleInterval = null;
 let smoothAvg = 0;
 let smoothBass = 0;
 
+// Style-specific state
+let mystifyPoints = [];
+const mystifyCount = 4;
+let bouncingCubeState = { pos: new THREE.Vector3(0,0,0), vel: new THREE.Vector3(0.08, 0.06, 0.04) };
+let cityBuildings = [];
+let originalSpherePos = null;
+
 // Unified Rendering Pipeline
 const canvas2d = document.getElementById('visualizer-2d'); 
 const ctx2d = canvas2d.getContext('2d');
@@ -26,8 +33,8 @@ const canvas3d = document.getElementById('visualizer-3d');
 
 let scene, camera, renderer, composer;
 let brandingScene, brandingCamera; 
-let vhsPass, glitchPass, crtPass;
-let sphere, terrain, tunnel, stars, logoSprite;
+let vhsPass, glitchPass, crtPass, bloomPass;
+let sphere, terrain, tunnel, stars, bouncingCube, cityContainer, logoSprite;
 let canvasPlane, canvasTexture;
 
 // DOM Elements
@@ -74,12 +81,24 @@ function init() {
   updateStyleOptions();
   updateCycleOptions();
   initThree();
+  initStyles();
   resize();
   
-  // Respect Feature Flags
   if (!FEATURE_FLAGS.enableBranding) {
     const brandingGroup = document.getElementById('branding-group') || document.querySelector('.control-group:last-child');
     if (brandingGroup) brandingGroup.style.display = 'none';
+  }
+}
+
+function initStyles() {
+  mystifyPoints = [];
+  for (let i = 0; i < mystifyCount; i++) {
+    mystifyPoints.push({
+      x: Math.random() * 1000,
+      y: Math.random() * 1000,
+      vx: (Math.random() - 0.5) * 10,
+      vy: (Math.random() - 0.5) * 10
+    });
   }
 }
 
@@ -105,16 +124,13 @@ function resize() {
   if (renderer) {
     renderer.setSize(width, height);
     renderer.setPixelRatio(window.devicePixelRatio);
-    
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
-    
     brandingCamera.left = -width / 2;
     brandingCamera.right = width / 2;
     brandingCamera.top = height / 2;
     brandingCamera.bottom = -height / 2;
     brandingCamera.updateProjectionMatrix();
-
     if (composer) composer.setSize(width, height);
     if (logoSprite) updateLogoPosition3D();
   }
@@ -136,7 +152,7 @@ function initThree() {
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   
-  const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+  bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
   composer.addPass(bloomPass);
 
   vhsPass = new ShaderPass(VHSShader); vhsPass.enabled = false; composer.addPass(vhsPass);
@@ -150,7 +166,9 @@ function initThree() {
   canvasPlane.position.z = 5;
   scene.add(canvasPlane);
 
-  sphere = new THREE.Mesh(new THREE.IcosahedronGeometry(2.5, 32), new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true }));
+  const sphereGeo = new THREE.IcosahedronGeometry(3.5, 32);
+  originalSpherePos = sphereGeo.attributes.position.array.slice();
+  sphere = new THREE.Mesh(sphereGeo, new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true }));
   scene.add(sphere);
 
   terrain = new THREE.Mesh(new THREE.PlaneGeometry(100, 100, 32, 32), new THREE.MeshPhongMaterial({ color: config.colors[1], wireframe: true, side: THREE.DoubleSide }));
@@ -169,6 +187,21 @@ function initThree() {
   starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
   stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 }));
   scene.add(stars);
+
+  const cubeGeo = new THREE.BoxGeometry(3, 3, 3);
+  const cubeWire = new THREE.WireframeGeometry(cubeGeo);
+  bouncingCube = new THREE.LineSegments(cubeWire, new THREE.LineBasicMaterial({ color: 0xffffff, linewidth: 2 }));
+  scene.add(bouncingCube);
+
+  cityContainer = new THREE.Group();
+  for (let i = 0; i < 50; i++) {
+    const h = Math.random() * 15 + 5;
+    const box = new THREE.Mesh(new THREE.BoxGeometry(2, h, 2), new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true }));
+    box.position.set((Math.random() - 0.5) * 40, h/2 - 10, -Math.random() * 200);
+    cityBuildings.push(box);
+    cityContainer.add(box);
+  }
+  scene.add(cityContainer);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.5));
   const p = new THREE.PointLight(0xffffff, 1); p.position.set(10, 10, 10); scene.add(p);
@@ -215,11 +248,14 @@ function draw() {
 
 function draw2D() {
   const w = canvas2d.width; const h = canvas2d.height;
+  const time = performance.now() * 0.001;
   ctx2d.clearRect(0, 0, w, h);
   if (config.engine !== '2d') return; 
 
   const bars = dataArray.length; const cx = w / 2; const cy = h / 2; const r = Math.min(w, h) / 4; const sens = config.sensitivity;
-  ctx2d.strokeStyle = config.colors[0]; ctx2d.lineWidth = 3 * window.devicePixelRatio; ctx2d.lineCap = 'round';
+  ctx2d.strokeStyle = config.colors[0]; ctx2d.lineWidth = 4 * window.devicePixelRatio; ctx2d.lineCap = 'round';
+
+  const intensity = (smoothAvg / 255) * config.sensitivity;
 
   if (config.style.startsWith('circular')) {
     for (let i = 0; i < bars; i++) {
@@ -237,12 +273,36 @@ function draw2D() {
       ctx2d.beginPath(); ctx2d.moveTo(x1, y1); ctx2d.lineTo(x2, y2); ctx2d.stroke();
     }
   } else if (config.style === 'sunrise') {
-    const sunriseY = h * 0.8; const sunriseR = r * 1.5;
+    const sunriseY = h / 2; const sunriseR = r * 1.8;
     for (let i = 0; i < bars; i++) {
       const barHeight = (dataArray[i] / 255) * r * (sens / 5); const angle = Math.PI + (i / bars) * Math.PI;
       const x1 = cx + Math.cos(angle) * (sunriseR - barHeight/2); const y1 = sunriseY + Math.sin(angle) * (sunriseR - barHeight/2);
       const x2 = cx + Math.cos(angle) * (sunriseR + barHeight/2); const y2 = sunriseY + Math.sin(angle) * (sunriseR + barHeight/2);
       ctx2d.beginPath(); ctx2d.moveTo(x1, y1); ctx2d.lineTo(x2, y2); ctx2d.stroke();
+    }
+    ctx2d.beginPath(); ctx2d.moveTo(0, sunriseY); ctx2d.lineTo(w, sunriseY); ctx2d.stroke();
+  } else if (config.style === 'mystify') {
+    const points = mystifyPoints;
+    const speed = 1 + intensity;
+    for (let i = 0; i < points.length; i++) {
+      let p = points[i];
+      p.x += p.vx * speed; p.y += p.vy * speed;
+      if (p.x < 0 || p.x > w) p.vx *= -1;
+      if (p.y < 0 || p.y > h) p.vy *= -1;
+    }
+    ctx2d.beginPath();
+    ctx2d.moveTo(points[0].x, points[0].y);
+    for (let i = 1; i < points.length; i++) ctx2d.lineTo(points[i].x, points[i].y);
+    ctx2d.closePath(); ctx2d.stroke();
+  } else if (config.style === 'plasma') {
+    const boxSize = 25 + Math.sin(time * 2) * 10;
+    for (let x = 0; x < w; x += boxSize) {
+      for (let y = 0; y < h; y += boxSize) {
+        const v = Math.sin(x/50 + time) + Math.sin(y/50 + time) + Math.sin((x+y)/50 + time);
+        const hue = (v * 50 + hueOffset) % 360;
+        ctx2d.fillStyle = `hsla(${hue}, 100%, 50%, 0.3)`;
+        ctx2d.fillRect(x, y, boxSize, boxSize);
+      }
     }
   } else if (config.style === 'bars') {
     const barWidth = (w / bars) * 2;
@@ -250,14 +310,6 @@ function draw2D() {
       const barHeight = (dataArray[i] / 255) * h * 0.5 * (sens / 5);
       ctx2d.fillStyle = config.colors[0]; ctx2d.fillRect(i * (barWidth + 1), h - barHeight, barWidth, barHeight);
     }
-  } else if (config.style === 'wave') {
-    ctx2d.beginPath(); const sliceWidth = w / bars; let x = 0;
-    for (let i = 0; i < bars; i++) {
-      const v = dataArray[i] / 128.0; const y = v * h / 2;
-      if (i === 0) ctx2d.moveTo(x, y); else ctx2d.lineTo(x, y);
-      x += sliceWidth;
-    }
-    ctx2d.stroke();
   }
 }
 
@@ -271,6 +323,8 @@ function renderUnified() {
   terrain.visible = is3D && config.style === '3d-terrain';
   tunnel.visible = is3D && config.style === '3d-tunnel';
   stars.visible = is3D && config.style === '3d-stars';
+  bouncingCube.visible = is3D && config.style === '3d-cube';
+  cityContainer.visible = is3D && config.style === '3d-city';
   canvasPlane.visible = !is3D;
 
   if (canvasPlane.visible) {
@@ -281,9 +335,34 @@ function renderUnified() {
     canvasPlane.scale.set(h * camera.aspect, h, 1);
   }
 
+  if (is3D) {
+    if (config.style === '3d-sphere' || config.style === '3d-cube') {
+      camera.position.x = Math.sin(time * 0.5) * 15;
+      camera.position.z = Math.cos(time * 0.5) * 15;
+      camera.lookAt(0, 0, 0);
+    } else if (config.style === '3d-terrain' || config.style === '3d-city') {
+      camera.position.y = -2 + bassIntensity;
+      camera.position.z = 15;
+      camera.lookAt(0, 0, -20);
+    } else if (config.style === '3d-tunnel') {
+      camera.position.z = 10;
+      camera.position.x = Math.sin(time * 2) * (2 + intensity);
+      camera.position.y = Math.cos(time * 2) * (2 + intensity);
+      camera.lookAt(0, 0, -50);
+    } else {
+      camera.position.set(0, 0, 15);
+      camera.lookAt(0, 0, 0);
+    }
+  }
+
   if (sphere.visible) {
-    const s = 1 + bassIntensity * 0.2;
-    sphere.scale.set(s, s, s);
+    const pos = sphere.geometry.attributes.position.array;
+    for (let i = 0; i < pos.length; i += 3) {
+      const ix = originalSpherePos[i]; const iy = originalSpherePos[i+1]; const iz = originalSpherePos[i+2];
+      const distortion = Math.sin(time * 2 + ix * 0.5) * intensity * 0.8;
+      pos[i] = ix + distortion; pos[i+1] = iy + distortion; pos[i+2] = iz + distortion;
+    }
+    sphere.geometry.attributes.position.needsUpdate = true;
     sphere.rotation.y += 0.01; sphere.material.color.set(config.colors[0]);
   }
   if (terrain.visible) {
@@ -299,9 +378,6 @@ function renderUnified() {
     tunnel.rotation.z += 0.01; 
     const s = 1 + intensity * 0.05; tunnel.scale.set(s, s, 1);
     tunnel.material.color.set(config.colors[0]);
-    camera.position.x = Math.sin(time) * 1.5; camera.position.y = Math.cos(time) * 1.5;
-  } else if (!is3D) {
-    camera.position.x = 0; camera.position.y = 0;
   }
   if (stars.visible) {
     const pos = stars.geometry.attributes.position.array;
@@ -315,14 +391,40 @@ function renderUnified() {
     stars.material.size = 0.1 + intensity * 0.1;
   }
 
-  if (vhsPass) { vhsPass.enabled = vhsToggle.checked; vhsPass.uniforms.time.value = time; }
+  if (bouncingCube.visible) {
+    const speed = 0.5 + intensity;
+    bouncingCubeState.pos.add(bouncingCubeState.vel.clone().multiplyScalar(speed));
+    if (Math.abs(bouncingCubeState.pos.x) > 8) bouncingCubeState.vel.x *= -1;
+    if (Math.abs(bouncingCubeState.pos.y) > 5) bouncingCubeState.vel.y *= -1;
+    if (Math.abs(bouncingCubeState.pos.z) > 4) bouncingCubeState.vel.z *= -1;
+    bouncingCube.position.copy(bouncingCubeState.pos);
+    bouncingCube.rotation.x += 0.02; bouncingCube.rotation.y += 0.02;
+    const s = 1 + bassIntensity * 0.3; bouncingCube.scale.set(s,s,s);
+    bouncingCube.material.color.set(config.colors[0]);
+  }
+
+  if (cityContainer.visible) {
+    const speed = 0.2 + intensity * 0.4; 
+    cityBuildings.forEach(b => {
+      b.position.z += speed;
+      if (b.position.z > 20) b.position.z = -200;
+      b.scale.y = 1 + bassIntensity * 0.8; 
+      b.material.color.set(config.colors[0]);
+    });
+  }
+
+  const filtersEnabled = vhsToggle.checked || crtToggle.checked || glitchToggle.checked;
+  if (bloomPass) {
+    const boost = filtersEnabled ? 0.5 : 0;
+    bloomPass.strength = 1.0 + boost + bassIntensity * 0.5;
+  }
+  if (vhsPass) { vhsPass.enabled = vhsToggle.checked; vhsPass.uniforms.time.value = time; vhsPass.uniforms.amount.value = 0.5 + intensity * 0.2; }
   if (crtPass) { crtPass.enabled = crtToggle.checked; crtPass.uniforms.time.value = time; }
-  if (glitchPass) { glitchPass.enabled = glitchToggle.checked; glitchPass.uniforms.time.value = time; }
+  if (glitchPass) { glitchPass.enabled = glitchToggle.checked || (smoothBass > 220); glitchPass.uniforms.time.value = time; }
 
   renderer.clear();
   composer.render();
 
-  // Conditional Branding Render
   if (FEATURE_FLAGS.enableBranding && logoSprite && brandImage) {
     logoSprite.visible = true;
     updateLogoPosition3D();
@@ -454,7 +556,7 @@ cycleToggle.onchange = () => {
         const nextStyle = checkedStyles[(currentIndex + 1) % checkedStyles.length];
         config.style = nextStyle; styleSelect.value = nextStyle;
       }
-    }, 5000);
+    }, 60000);
   } else {
     cycleSelection.classList.add('hidden'); clearInterval(cycleInterval);
   }
