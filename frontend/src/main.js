@@ -46,7 +46,6 @@ const cycleToggle = document.getElementById('cycle-toggle');
 const cycleSelection = document.getElementById('cycle-selection');
 const cycleStyleCheckboxes = document.querySelectorAll('.cycle-style');
 
-// Toggles for Filters
 const vhsToggle = document.getElementById('vhs-toggle');
 const crtToggle = document.getElementById('crt-toggle');
 const glitchToggle = document.getElementById('glitch-toggle');
@@ -66,8 +65,8 @@ let config = { ...DEFAULT_CONFIG };
 
 function init() {
   updateStyleOptions();
-  resize();
   initThree();
+  resize(); // Call resize after initThree to set correct sizes
 }
 
 function updateStyleOptions() {
@@ -76,25 +75,32 @@ function updateStyleOptions() {
 }
 
 function resize() {
-  canvas2d.width = canvas2d.offsetWidth * window.devicePixelRatio;
-  canvas2d.height = canvas2d.offsetHeight * window.devicePixelRatio;
+  const container = canvas2d.parentElement;
+  const width = container.offsetWidth;
+  const height = container.offsetHeight;
+
+  canvas2d.width = width * window.devicePixelRatio;
+  canvas2d.height = height * window.devicePixelRatio;
+  
   if (renderer) {
-    renderer.setSize(canvas3d.offsetWidth, canvas3d.offsetHeight);
-    camera.aspect = canvas3d.offsetWidth / canvas3d.offsetHeight;
+    renderer.setSize(width, height);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    camera.aspect = width / height;
     camera.updateProjectionMatrix();
+    if (composer) {
+      composer.setSize(width, height);
+    }
   }
 }
 window.addEventListener('resize', resize);
 
 function initThree() {
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(75, canvas3d.offsetWidth / canvas3d.offsetHeight, 0.1, 1000);
+  camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
   camera.position.z = 5;
 
   renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
-  renderer.setPixelRatio(window.devicePixelRatio);
-  renderer.setSize(canvas3d.offsetWidth, canvas3d.offsetHeight);
-
+  
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   const bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
@@ -257,13 +263,13 @@ function draw3D() {
     tunnel.material.color.set(config.colors[0]);
   }
 
-  vhsPass.enabled = vhsToggle.checked;
-  crtPass.enabled = crtToggle.checked;
-  glitchPass.enabled = glitchToggle.checked;
+  if (vhsPass) vhsPass.enabled = vhsToggle.checked;
+  if (crtPass) crtPass.enabled = crtToggle.checked;
+  if (glitchPass) glitchPass.enabled = glitchToggle.checked;
 
   composer.render();
   
-  // Also draw branding on 2D canvas as overlay
+  // Clear and overlay branding
   ctx2d.clearRect(0, 0, canvas2d.width, canvas2d.height);
   if (brandImage) drawBranding(ctx2d, canvas2d.width, canvas2d.height);
 }
@@ -289,17 +295,22 @@ function drawBranding(ctx, w, h) {
 
 engineSelect.onchange = (e) => {
   config.engine = e.target.value;
-  canvas2d.classList.toggle('hidden', config.engine === '3d');
-  canvas3d.classList.toggle('hidden', config.engine === '2d');
   
-  // Special: when in 3D, we show 2D canvas as transparent overlay for branding
-  if (config.engine === '3d') {
+  // Reset visibility
+  canvas2d.classList.add('hidden');
+  canvas3d.classList.add('hidden');
+  
+  if (config.engine === '2d') {
+    canvas2d.classList.remove('hidden');
+    canvas2d.style.pointerEvents = 'auto';
+  } else {
+    canvas3d.classList.remove('hidden');
+    // Overlay 2D for branding
     canvas2d.classList.remove('hidden');
     canvas2d.style.pointerEvents = 'none';
-  } else {
-    canvas2d.style.pointerEvents = 'auto';
   }
   
+  resize(); // Recalculate sizes when switching engines
   updateStyleOptions();
 };
 
@@ -327,6 +338,7 @@ function handleFile(file) {
       playBtn.disabled = false;
       recordBtn.disabled = false;
       statusBadge.textContent = 'Session Ready: ' + audioFile.name;
+      resize(); // Ensure correct dimensions once visible
     }, 500);
   } else {
     showError('Please upload a valid audio track to begin.');
