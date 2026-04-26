@@ -25,17 +25,12 @@ let sphere, terrain, tunnel;
 
 // DOM Elements
 const dropZone = document.getElementById('drop-zone');
-const startBtn = document.getElementById('start-btn');
 const uploadError = document.getElementById('upload-error');
 const loadingOverlay = document.getElementById('loading-overlay');
 
 const trackInput = document.getElementById('track-input');
 const trackBtn = document.getElementById('track-btn');
 const trackSlot = document.getElementById('track-slot');
-
-const logoInput = document.getElementById('logo-input');
-const logoBtn = document.getElementById('logo-btn');
-const logoSlot = document.getElementById('logo-slot');
 
 const playBtn = document.getElementById('play-btn');
 const stopPreviewBtn = document.getElementById('stop-preview-btn');
@@ -51,9 +46,18 @@ const cycleToggle = document.getElementById('cycle-toggle');
 const cycleSelection = document.getElementById('cycle-selection');
 const cycleStyleCheckboxes = document.querySelectorAll('.cycle-style');
 
+// Toggles for Filters
+const vhsToggle = document.getElementById('vhs-toggle');
+const crtToggle = document.getElementById('crt-toggle');
+const glitchToggle = document.getElementById('glitch-toggle');
+
+const brandBtn = document.getElementById('brand-btn');
+const brandInput = document.getElementById('brand-input');
 const brandScale = document.getElementById('brand-scale');
 const brandPos = document.getElementById('brand-pos');
 const brandControls = document.getElementById('brand-controls');
+const brandDropZone = document.getElementById('brand-drop-zone');
+const brandPreview = document.getElementById('brand-preview');
 
 // Config
 let config = { ...DEFAULT_CONFIG };
@@ -100,16 +104,28 @@ function initThree() {
   glitchPass = new ShaderPass(GlitchShader); glitchPass.enabled = false; composer.addPass(glitchPass);
   crtPass = new ShaderPass(CRTShader); crtPass.enabled = false; composer.addPass(crtPass);
 
-  const geo = new THREE.IcosahedronGeometry(1.5, 32);
-  const mat = new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true });
-  sphere = new THREE.Mesh(geo, mat);
+  // Sphere
+  sphere = new THREE.Mesh(
+    new THREE.IcosahedronGeometry(1.5, 32),
+    new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true })
+  );
   scene.add(sphere);
 
-  const tGeo = new THREE.PlaneGeometry(20, 20, 50, 50);
-  const tMat = new THREE.MeshPhongMaterial({ color: config.colors[1], wireframe: true, side: THREE.DoubleSide });
-  terrain = new THREE.Mesh(tGeo, tMat);
-  terrain.rotation.x = -Math.PI / 2; terrain.position.y = -2;
+  // Terrain
+  terrain = new THREE.Mesh(
+    new THREE.PlaneGeometry(30, 30, 64, 64),
+    new THREE.MeshPhongMaterial({ color: config.colors[1], wireframe: true, side: THREE.DoubleSide })
+  );
+  terrain.rotation.x = -Math.PI / 2; terrain.position.y = -2.5;
   scene.add(terrain);
+
+  // Tunnel
+  tunnel = new THREE.Mesh(
+    new THREE.CylinderGeometry(5, 5, 100, 32, 100, true),
+    new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true, side: THREE.BackSide })
+  );
+  tunnel.rotation.x = Math.PI / 2;
+  scene.add(tunnel);
 
   scene.add(new THREE.AmbientLight(0xffffff, 0.5));
   const p = new THREE.PointLight(0xffffff, 1); p.position.set(5, 5, 5); scene.add(p);
@@ -217,6 +233,7 @@ function draw3D() {
 
   sphere.visible = config.style === '3d-sphere';
   terrain.visible = config.style === '3d-terrain';
+  tunnel.visible = config.style === '3d-tunnel';
 
   if (sphere.visible) {
     sphere.scale.set(1 + bass/255 * 0.3, 1 + bass/255 * 0.3, 1 + bass/255 * 0.3);
@@ -227,18 +244,27 @@ function draw3D() {
   if (terrain.visible) {
     const pos = terrain.geometry.attributes.position.array;
     for (let i = 0; i < pos.length; i += 3) {
-      pos[i+2] = Math.sin(pos[i] * 0.5 + time) * intensity;
+      pos[i+2] = Math.sin(pos[i] * 0.2 + time) * intensity * 2;
     }
     terrain.geometry.attributes.position.needsUpdate = true;
     terrain.material.color.set(config.colors[1]);
   }
 
-  if (vhsPass) vhsPass.enabled = vhsToggle.checked;
-  if (crtPass) crtPass.enabled = crtToggle.checked;
-  if (glitchPass) glitchPass.enabled = glitchToggle.checked;
+  if (tunnel.visible) {
+    tunnel.position.z += 0.2 + (avg / 255);
+    if (tunnel.position.z > 50) tunnel.position.z = 0;
+    tunnel.rotation.z += 0.005;
+    tunnel.material.color.set(config.colors[0]);
+  }
+
+  vhsPass.enabled = vhsToggle.checked;
+  crtPass.enabled = crtToggle.checked;
+  glitchPass.enabled = glitchToggle.checked;
 
   composer.render();
   
+  // Also draw branding on 2D canvas as overlay
+  ctx2d.clearRect(0, 0, canvas2d.width, canvas2d.height);
   if (brandImage) drawBranding(ctx2d, canvas2d.width, canvas2d.height);
 }
 
@@ -265,54 +291,73 @@ engineSelect.onchange = (e) => {
   config.engine = e.target.value;
   canvas2d.classList.toggle('hidden', config.engine === '3d');
   canvas3d.classList.toggle('hidden', config.engine === '2d');
+  
+  // Special: when in 3D, we show 2D canvas as transparent overlay for branding
+  if (config.engine === '3d') {
+    canvas2d.classList.remove('hidden');
+    canvas2d.style.pointerEvents = 'none';
+  } else {
+    canvas2d.style.pointerEvents = 'auto';
+  }
+  
   updateStyleOptions();
 };
 
 styleSelect.onchange = (e) => config.style = e.target.value;
 sensitivitySlider.oninput = (e) => config.sensitivity = e.target.value;
 
-// Dual Drag & Drop Logic
 dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
 dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
 dropZone.ondrop = (e) => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
-  const files = Array.from(e.dataTransfer.files);
-  files.forEach(file => handleFile(file));
+  handleFile(e.dataTransfer.files[0]);
 };
 
 trackBtn.onclick = () => trackInput.click();
 trackInput.onchange = (e) => handleFile(e.target.files[0]);
 
-logoBtn.onclick = () => logoInput.click();
-logoInput.onchange = (e) => handleFile(e.target.files[0]);
-
 function handleFile(file) {
-  if (!file) return;
-  uploadError.classList.add('hidden');
-  
-  if (file.type.startsWith('audio/')) {
+  if (file && file.type.startsWith('audio/')) {
     audioFile = file;
     trackSlot.classList.add('ready');
     trackSlot.querySelector('.slot-status').textContent = 'Received';
-    checkReady();
-  } else if (file.type.startsWith('image/')) {
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      brandImage = new Image();
-      brandImage.src = ev.target.result;
-      brandImage.onload = () => {
-        logoSlot.classList.add('ready');
-        logoSlot.querySelector('.slot-status').textContent = 'Received';
-        brandControls.classList.remove('hidden');
-        checkReady();
-      };
-    };
-    reader.onerror = () => showError('Failed to load image logo.');
-    reader.readAsDataURL(file);
+    setTimeout(() => {
+      dropZone.classList.add('hidden');
+      playBtn.disabled = false;
+      recordBtn.disabled = false;
+      statusBadge.textContent = 'Session Ready: ' + audioFile.name;
+    }, 500);
   } else {
-    showError('Unsupported file type: ' + file.type);
+    showError('Please upload a valid audio track to begin.');
   }
+}
+
+brandBtn.onclick = () => brandInput.click();
+brandInput.onchange = (e) => handleBrandFile(e.target.files[0]);
+
+brandDropZone.ondragover = (e) => { e.preventDefault(); brandDropZone.classList.add('drag-over'); };
+brandDropZone.ondragleave = () => brandDropZone.classList.remove('drag-over');
+brandDropZone.ondrop = (e) => {
+  e.preventDefault();
+  brandDropZone.classList.remove('drag-over');
+  handleBrandFile(e.dataTransfer.files[0]);
+};
+
+function handleBrandFile(file) {
+  if (!file || !file.type.startsWith('image/')) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    brandImage = new Image();
+    brandImage.src = ev.target.result;
+    brandImage.onload = () => {
+      brandControls.classList.remove('hidden');
+      brandPreview.src = brandImage.src;
+      brandPreview.classList.remove('hidden');
+      brandBtn.textContent = 'Change Logo';
+    };
+  };
+  reader.readAsDataURL(file);
 }
 
 function showError(msg) {
@@ -320,36 +365,21 @@ function showError(msg) {
   uploadError.classList.remove('hidden');
 }
 
-function checkReady() {
-  if (audioFile) {
-    startBtn.classList.remove('hidden');
-  }
-}
-
-startBtn.onclick = async () => {
+playBtn.onclick = async () => {
   loadingOverlay.classList.remove('hidden');
   try {
-    // We pre-setup the audio context to handle the decoding time
-    await setupAudio(); 
-    dropZone.classList.add('hidden');
-    playBtn.disabled = false;
-    recordBtn.disabled = false;
-    statusBadge.textContent = 'Session Active: ' + audioFile.name;
+    const source = await setupAudio();
+    loadingOverlay.classList.add('hidden');
+    source.start(0);
+    draw();
+    playBtn.disabled = true;
+    stopPreviewBtn.disabled = false;
+    engineSelect.disabled = true;
+    source.onended = stopPreview;
   } catch (err) {
-    showError('Error initializing audio: ' + err.message);
-  } finally {
+    showError('Error initializing playback: ' + err.message);
     loadingOverlay.classList.add('hidden');
   }
-};
-
-playBtn.onclick = async () => {
-  const source = await setupAudio();
-  source.start(0);
-  draw();
-  playBtn.disabled = true;
-  stopPreviewBtn.disabled = false;
-  engineSelect.disabled = true;
-  source.onended = stopPreview;
 };
 
 stopPreviewBtn.onclick = stopPreview;
@@ -393,25 +423,32 @@ cycleToggle.onchange = () => {
 };
 
 recordBtn.onclick = async () => {
-  const source = await setupAudio();
-  const dest = audioContext.createMediaStreamDestination();
-  analyser.connect(dest);
-  const activeCanvas = config.engine === '2d' ? canvas2d : canvas3d;
-  const canvasStream = activeCanvas.captureStream(60);
-  const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
-  mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 12000000 });
-  recordedChunks = [];
-  mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
-  mediaRecorder.onstop = exportVideo;
-  recordingOverlay.style.display = 'flex';
-  engineSelect.disabled = true;
-  source.start(0);
-  mediaRecorder.start();
-  draw();
-  source.onended = () => {
-    mediaRecorder.stop();
-    engineSelect.disabled = false;
-  };
+  loadingOverlay.classList.remove('hidden');
+  try {
+    const source = await setupAudio();
+    const dest = audioContext.createMediaStreamDestination();
+    analyser.connect(dest);
+    const activeCanvas = config.engine === '2d' ? canvas2d : canvas3d;
+    const canvasStream = activeCanvas.captureStream(60);
+    const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
+    mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 12000000 });
+    recordedChunks = [];
+    mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
+    mediaRecorder.onstop = exportVideo;
+    loadingOverlay.classList.add('hidden');
+    recordingOverlay.style.display = 'flex';
+    engineSelect.disabled = true;
+    source.start(0);
+    mediaRecorder.start();
+    draw();
+    source.onended = () => {
+      mediaRecorder.stop();
+      engineSelect.disabled = false;
+    };
+  } catch (err) {
+    showError('Error initializing recording: ' + err.message);
+    loadingOverlay.classList.add('hidden');
+  }
 };
 
 async function exportVideo() {

@@ -27,27 +27,19 @@
             <div class="drop-content">
               <div class="icon">🚀</div>
               <h2>Prepare Your Session</h2>
-              <p>Upload your track and branding to begin</p>
+              <p>Upload your audio track to begin</p>
               
               <div class="upload-slots">
                 <div class="upload-slot" id="track-slot">
                   <div class="slot-icon">🎵</div>
-                  <button class="btn-secondary" id="track-btn">Track</button>
+                  <button class="btn-primary" id="track-btn">Upload Track</button>
                   <span class="slot-status">Waiting...</span>
-                </div>
-                <div class="upload-slot" id="logo-slot">
-                  <div class="slot-icon">🖼️</div>
-                  <button class="btn-secondary" id="logo-btn">Logo</button>
-                  <span class="slot-status">Optional</span>
                 </div>
               </div>
 
               <div id="upload-error" class="error-msg hidden"></div>
               
-              <button class="btn-primary hidden" id="start-btn">Start Visualizer</button>
-              
               <input type="file" id="track-input" accept="audio/*" hidden />
-              <input type="file" id="logo-input" accept="image/*" hidden />
             </div>
           </div>
         </div>
@@ -121,7 +113,11 @@
 
           <div class="control-group">
             <label>Branding (Watermark)</label>
-            <button class="btn-secondary" id="brand-btn">Upload Logo</button>
+            <div id="brand-drop-zone" class="mini-drop-zone">
+              <img id="brand-preview" class="hidden" alt="Logo Preview" />
+              <button class="btn-secondary" id="brand-btn">Upload Logo</button>
+              <p class="hint">or drag & drop</p>
+            </div>
             <input type="file" id="brand-input" accept="image/*" hidden />
             <div id="brand-controls" class="hidden">
               <div class="sub-control">
