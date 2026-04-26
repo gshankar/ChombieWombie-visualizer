@@ -492,3 +492,26 @@ button {
   justify-content: center;
   align-items: center;
 }
+
+body.headless #app header,
+body.headless #app main .controls-panel,
+body.headless #app .loading-overlay,
+body.headless #app main .visualizer-container .drop-zone {
+  display: none !important;
+}
+
+body.headless #app {
+  padding: 0;
+}
+
+body.headless #app main {
+  grid-template-columns: 1fr;
+  padding: 0;
+}
+
+body.headless .visualizer-container {
+  border: none;
+  border-radius: 0;
+  width: 1920px;
+  height: 1080px;
+}

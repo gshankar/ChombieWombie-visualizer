@@ -37,6 +37,9 @@ let vhsPass, glitchPass, crtPass, bloomPass;
 let sphere, terrain, tunnel, stars, bouncingCube, cityContainer, logoSprite;
 let canvasPlane, canvasTexture;
 
+// Headless Detection
+const isHeadless = new URLSearchParams(window.location.search).get('headless') === 'true';
+
 // DOM Elements
 const dropZone = document.getElementById('drop-zone');
 const uploadError = document.getElementById('upload-error');
@@ -84,10 +87,44 @@ function init() {
   initStyles();
   resize();
   
+  if (isHeadless) {
+    document.body.classList.add('headless');
+    setupHeadlessAPI();
+  }
+
   if (!FEATURE_FLAGS.enableBranding) {
     const brandingGroup = document.getElementById('branding-group') || document.querySelector('.control-group:last-child');
     if (brandingGroup) brandingGroup.style.display = 'none';
   }
+}
+
+function setupHeadlessAPI() {
+  window.renderFrame = async (frameIndex, frameData, frameConfig, frameTime) => {
+    // Override globals for this frame
+    config = { ...config, ...frameConfig };
+    dataArray = new Uint8Array(frameData);
+    
+    // Calculate smoothing manually for this frame
+    const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+    const bassRange = dataArray.slice(0, 10);
+    const bass = bassRange.reduce((a, b) => a + b) / bassRange.length;
+    smoothAvg = avg; 
+    smoothBass = bass;
+
+    // Handle color cycling
+    if (colorCycleToggle.checked) {
+      hueOffset = (frameTime * 30) % 360;
+      config.colors = [`hsl(${hueOffset}, 100%, 50%)`, `hsl(${(hueOffset + 60) % 360}, 100%, 50%)` ];
+    }
+
+    draw2D();
+    renderUnified(frameTime);
+    
+    return new Promise(resolve => {
+      renderer.setAnimationLoop(null);
+      resolve(canvas3d.toDataURL('image/png'));
+    });
+  };
 }
 
 function initStyles() {
@@ -115,15 +152,15 @@ function updateCycleOptions() {
 
 function resize() {
   const container = canvas3d.parentElement;
-  const width = container.offsetWidth;
-  const height = container.offsetHeight;
+  const width = isHeadless ? 1920 : container.offsetWidth;
+  const height = isHeadless ? 1080 : container.offsetHeight;
 
-  canvas2d.width = width * window.devicePixelRatio;
-  canvas2d.height = height * window.devicePixelRatio;
+  canvas2d.width = width * (isHeadless ? 1 : window.devicePixelRatio);
+  canvas2d.height = height * (isHeadless ? 1 : window.devicePixelRatio);
   
   if (renderer) {
     renderer.setSize(width, height);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(isHeadless ? 1 : window.devicePixelRatio);
     camera.aspect = width / height;
     camera.updateProjectionMatrix();
     brandingCamera.left = -width / 2;
@@ -146,18 +183,16 @@ function initThree() {
   brandingCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 100);
   brandingCamera.position.z = 10;
 
-  renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
+  renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.autoClear = false;
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
   
-  // VHS/CRT/Glitch passes FIRST
   vhsPass = new ShaderPass(VHSShader); vhsPass.enabled = false; composer.addPass(vhsPass);
   glitchPass = new ShaderPass(GlitchShader); glitchPass.enabled = false; composer.addPass(glitchPass);
   crtPass = new ShaderPass(CRTShader); crtPass.enabled = false; composer.addPass(crtPass);
 
-  // Bloom LAST to catch the scanlines and brightened pixels
   bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
   composer.addPass(bloomPass);
 
@@ -229,7 +264,10 @@ async function setupAudio() {
 // --- Rendering Loop ---
 
 function draw() {
+  if (isHeadless) return;
   animationId = requestAnimationFrame(draw);
+  const time = performance.now() * 0.001;
+  
   if (analyser) {
     analyser.getByteFrequencyData(dataArray);
     const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
@@ -245,7 +283,7 @@ function draw() {
   }
 
   draw2D();
-  renderUnified();
+  renderUnified(time);
 }
 
 function draw2D() {
@@ -255,7 +293,7 @@ function draw2D() {
   if (config.engine !== '2d') return; 
 
   const bars = dataArray.length; const cx = w / 2; const cy = h / 2; const r = Math.min(w, h) / 4; const sens = config.sensitivity;
-  ctx2d.strokeStyle = config.colors[0]; ctx2d.lineWidth = 4 * window.devicePixelRatio; ctx2d.lineCap = 'round';
+  ctx2d.strokeStyle = config.colors[0]; ctx2d.lineWidth = 4 * (isHeadless ? 1 : window.devicePixelRatio); ctx2d.lineCap = 'round';
 
   const intensity = (smoothAvg / 255) * config.sensitivity;
 
@@ -315,8 +353,7 @@ function draw2D() {
   }
 }
 
-function renderUnified() {
-  const time = performance.now() * 0.001;
+function renderUnified(time) {
   const intensity = (smoothAvg / 255) * config.sensitivity;
   const bassIntensity = (smoothBass / 255) * config.sensitivity;
 
@@ -452,8 +489,8 @@ function renderUnified() {
 function updateLogoPosition3D() {
   if (!logoSprite || !brandImage) return;
   const logoAspect = brandImage.width / brandImage.height;
-  const width = canvas3d.width / window.devicePixelRatio;
-  const height = canvas3d.height / window.devicePixelRatio;
+  const width = canvas3d.width / (isHeadless ? 1 : window.devicePixelRatio);
+  const height = canvas3d.height / (isHeadless ? 1 : window.devicePixelRatio);
   const baseScale = (brandScale.value / 100) * (height * 0.3);
   logoSprite.scale.set(baseScale * logoAspect, baseScale, 1);
   const hLimit = width / 2; const vLimit = height / 2; const padding = baseScale * 0.5 + 40;
@@ -464,6 +501,41 @@ function updateLogoPosition3D() {
     case 'bottom-left': logoSprite.position.set(-hLimit + padding, -vLimit + padding, 0); break;
     case 'center': logoSprite.position.set(0, 0, 0); break;
   }
+}
+
+// --- Offline Audio Analysis ---
+
+async function getAudioDataMap() {
+  if (!audioFile) return null;
+  const buffer = await audioFile.arrayBuffer();
+  const offlineCtx = new OfflineAudioContext(1, buffer.byteLength, 44100);
+  const audioBuffer = await offlineCtx.decodeAudioData(buffer);
+  
+  const source = offlineCtx.createBufferSource();
+  source.buffer = audioBuffer;
+  
+  const analyser = offlineCtx.createAnalyser();
+  analyser.fftSize = 512;
+  source.connect(analyser);
+  analyser.connect(offlineCtx.destination);
+  
+  const sampleRate = 44100;
+  const fps = 60;
+  const samplesPerFrame = sampleRate / fps;
+  const totalFrames = Math.ceil(audioBuffer.duration * fps);
+  const dataMap = [];
+  
+  source.start(0);
+  
+  for (let i = 0; i < totalFrames; i++) {
+    await offlineCtx.suspend(i * samplesPerFrame / sampleRate);
+    const data = new Uint8Array(analyser.frequencyBinCount);
+    analyser.getByteFrequencyData(data);
+    dataMap.push(Array.from(data));
+    offlineCtx.resume();
+  }
+  
+  return dataMap;
 }
 
 // --- Handlers ---
@@ -580,39 +652,46 @@ cycleToggle.onchange = () => {
 };
 
 recordBtn.onclick = async () => {
-  dropZone.classList.add('hidden');
+  statusBadge.textContent = 'Analyzing...';
   loadingOverlay.classList.remove('hidden');
+  loadingOverlay.querySelector('p').textContent = 'Analyzing audio for background render...';
+  
   try {
-    const source = await setupAudio();
-    const dest = audioContext.createMediaStreamDestination(); analyser.connect(dest);
-    const canvasStream = canvas3d.captureStream(60);
-    const combinedStream = new MediaStream([...canvasStream.getVideoTracks(), ...dest.stream.getAudioTracks()]);
-    mediaRecorder = new MediaRecorder(combinedStream, { mimeType: 'video/webm;codecs=vp9', videoBitsPerSecond: 12000000 });
-    recordedChunks = []; mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
-    mediaRecorder.onstop = exportVideo;
-    loadingOverlay.classList.add('hidden'); recordingOverlay.style.display = 'flex';
-    engineSelect.disabled = true; source.start(0); mediaRecorder.start(); draw();
-    source.onended = () => { mediaRecorder.stop(); engineSelect.disabled = false; };
-    statusBadge.textContent = 'Recording';
+    const audioDataMap = await getAudioDataMap();
+    statusBadge.textContent = 'Uploading...';
+    loadingOverlay.querySelector('p').textContent = 'Starting Mac Studio Render Engine...';
+
+    const formData = new FormData();
+    formData.append('audio', audioFile);
+    formData.append('dataMap', JSON.stringify(audioDataMap));
+    formData.append('config', JSON.stringify({
+      ...config,
+      vhs: vhsToggle.checked,
+      crt: crtToggle.checked,
+      glitch: glitchToggle.checked,
+      colorCycle: colorCycleToggle.checked
+    }));
+
+    const res = await fetch('http://localhost:3001/api/render-headless', {
+      method: 'POST',
+      body: formData
+    });
+
+    if (res.ok) {
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'ChombieWombie-Studio-Render.mp4'; a.click();
+    } else {
+      throw new Error('Render failed on server');
+    }
   } catch (err) {
-    showError('Error initializing recording: ' + err.message); loadingOverlay.classList.add('hidden');
+    console.error(err);
+    showError('Headless render failed: ' + err.message);
+  } finally {
+    loadingOverlay.classList.add('hidden');
+    statusBadge.textContent = 'Done';
   }
 };
-
-async function exportVideo() {
-  const blob = new Blob(recordedChunks, { type: 'video/webm' });
-  const formData = new FormData(); formData.append('video', blob);
-  statusBadge.textContent = 'Encoding...';
-  try {
-    const res = await fetch('http://localhost:3001/api/encode', { method: 'POST', body: formData });
-    if (res.ok) {
-      const result = await res.blob(); const url = URL.createObjectURL(result);
-      const a = document.createElement('a'); a.href = url; a.download = 'ChombieWombie-Visualizer.mp4'; a.click();
-    }
-  } catch (err) { console.error(err); }
-  recordingOverlay.style.display = 'none';
-  statusBadge.textContent = 'Exported';
-  dropZone.classList.remove('hidden');
-}
 
 init();
