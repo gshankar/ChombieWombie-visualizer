@@ -11,6 +11,10 @@ const port = 3001;
 app.use(cors());
 app.use(express.json());
 
+app.get('/', (req, res) => {
+  res.status(200).json({ status: 'ok', service: 'ChombieWombie-Backend' });
+});
+
 // Setup storage for recorded blobs
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -66,6 +70,10 @@ app.post('/api/encode', upload.single('video'), (req, res) => {
 // Static folder for exports if needed
 app.use('/exports', express.static(path.join(__dirname, 'temp')));
 
-app.listen(port, () => {
-  console.log(`ChombieWombie Backend listening at http://localhost:${port}`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(port, () => {
+    console.log(`ChombieWombie Backend listening at http://localhost:${port}`);
+  });
+}
+
+module.exports = app;

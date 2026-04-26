@@ -21,7 +21,8 @@
 
       <main>
         <div class="visualizer-container">
-          <canvas id="visualizer"></canvas>
+          <canvas id="visualizer-2d"></canvas>
+          <canvas id="visualizer-3d" class="hidden"></canvas>
           <div class="drop-zone" id="drop-zone">
             <div class="drop-content">
               <div class="icon">♪</div>
@@ -44,21 +45,27 @@
               <button class="palette active" data-colors="#00f2ff,#ff00ea" style="background: linear-gradient(45deg, #00f2ff, #ff00ea)"></button>
               <button class="palette" data-colors="#7000ff,#00ff88" style="background: linear-gradient(45deg, #7000ff, #00ff88)"></button>
               <button class="palette" data-colors="#ff8c00,#ff0000" style="background: linear-gradient(45deg, #ff8c00, #ff0000)"></button>
+              <button class="palette" data-colors="#4dff00,#00ff88" style="background: linear-gradient(45deg, #4dff00, #00ff88)"></button>
+              <button class="palette" data-colors="#00fff2,#0059ff" style="background: linear-gradient(45deg, #00fff2, #0059ff)"></button>
+              <button class="palette" data-colors="#ffffff,#888888" style="background: linear-gradient(45deg, #ffffff, #888888)"></button>
+            </div>
+            <div class="toggle-control" style="margin-top: 1rem;">
+              <label>Cycle Colors</label>
+              <input type="checkbox" id="color-cycle-toggle" />
             </div>
           </div>
           <div class="control-group">
+            <label>Rendering Engine</label>
+            <select id="engine-select">
+              <option value="2d">2D (Classic High Fidelity)</option>
+              <option value="3d">3D (Immersive Retro)</option>
+            </select>
+          </div>
+
+          <div class="control-group">
             <label>Visual Style</label>
             <select id="style-select">
-              <option value="3d-sphere">3D: Audio Sphere</option>
-              <option value="3d-terrain">3D: Retro Terrain</option>
-              <option value="3d-tunnel">3D: Hyper Tunnel</option>
-              <option value="circular">Circular: Outward</option>
-              <option value="circular-inner">Circular: Inward</option>
-              <option value="circular-dual">Circular: Dual</option>
-              <option value="starfield">Starfield (Retro)</option>
-              <option value="bouncing">Bouncing Logo (DVD)</option>
-              <option value="bars">Linear Bars</option>
-              <option value="wave">Oscilloscope</option>
+              <!-- Options populated by JS based on engine -->
             </select>
           </div>
 
