@@ -154,14 +154,15 @@
         </div>
       </main>
 
-      <div class="recording-overlay" id="recording-overlay">
-        <div class="recording-content">
+      <div class="loading-overlay hidden" id="loading-overlay">
+        <div class="loading-content">
           <div class="spinner"></div>
-          <h3>Recording & Processing...</h3>
-          <p>Please keep this tab active.</p>
-          <button class="btn-danger" id="stop-btn">Stop & Export</button>
+          <h3>Initializing Engine...</h3>
+          <p>Decoding audio and preparing 3D assets</p>
         </div>
       </div>
+
+      <div class="recording-overlay hidden" id="recording-overlay">
     </div>
     <script type="module" src="/src/main.js"></script>
   </body>

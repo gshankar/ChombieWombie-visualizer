@@ -25,8 +25,18 @@ let sphere, terrain, tunnel;
 
 // DOM Elements
 const dropZone = document.getElementById('drop-zone');
-const fileInput = document.getElementById('file-input');
-const fileBtn = document.getElementById('file-btn');
+const startBtn = document.getElementById('start-btn');
+const uploadError = document.getElementById('upload-error');
+const loadingOverlay = document.getElementById('loading-overlay');
+
+const trackInput = document.getElementById('track-input');
+const trackBtn = document.getElementById('track-btn');
+const trackSlot = document.getElementById('track-slot');
+
+const logoInput = document.getElementById('logo-input');
+const logoBtn = document.getElementById('logo-btn');
+const logoSlot = document.getElementById('logo-slot');
+
 const playBtn = document.getElementById('play-btn');
 const stopPreviewBtn = document.getElementById('stop-preview-btn');
 const recordBtn = document.getElementById('record-btn');
@@ -41,9 +51,6 @@ const cycleToggle = document.getElementById('cycle-toggle');
 const cycleSelection = document.getElementById('cycle-selection');
 const cycleStyleCheckboxes = document.querySelectorAll('.cycle-style');
 
-// Branding
-const brandBtn = document.getElementById('brand-btn');
-const brandInput = document.getElementById('brand-input');
 const brandScale = document.getElementById('brand-scale');
 const brandPos = document.getElementById('brand-pos');
 const brandControls = document.getElementById('brand-controls');
@@ -264,38 +271,75 @@ engineSelect.onchange = (e) => {
 styleSelect.onchange = (e) => config.style = e.target.value;
 sensitivitySlider.oninput = (e) => config.sensitivity = e.target.value;
 
+// Dual Drag & Drop Logic
 dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
 dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
 dropZone.ondrop = (e) => {
   e.preventDefault();
   dropZone.classList.remove('drag-over');
-  handleFile(e.dataTransfer.files[0]);
+  const files = Array.from(e.dataTransfer.files);
+  files.forEach(file => handleFile(file));
 };
 
-fileBtn.onclick = () => fileInput.click();
-fileInput.onchange = (e) => handleFile(e.target.files[0]);
+trackBtn.onclick = () => trackInput.click();
+trackInput.onchange = (e) => handleFile(e.target.files[0]);
+
+logoBtn.onclick = () => logoInput.click();
+logoInput.onchange = (e) => handleFile(e.target.files[0]);
 
 function handleFile(file) {
-  if (file && file.type.startsWith('audio/')) {
+  if (!file) return;
+  uploadError.classList.add('hidden');
+  
+  if (file.type.startsWith('audio/')) {
     audioFile = file;
-    dropZone.classList.add('hidden');
-    playBtn.disabled = false;
-    recordBtn.disabled = false;
-    statusBadge.textContent = 'Ready: ' + audioFile.name;
+    trackSlot.classList.add('ready');
+    trackSlot.querySelector('.slot-status').textContent = 'Received';
+    checkReady();
+  } else if (file.type.startsWith('image/')) {
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      brandImage = new Image();
+      brandImage.src = ev.target.result;
+      brandImage.onload = () => {
+        logoSlot.classList.add('ready');
+        logoSlot.querySelector('.slot-status').textContent = 'Received';
+        brandControls.classList.remove('hidden');
+        checkReady();
+      };
+    };
+    reader.onerror = () => showError('Failed to load image logo.');
+    reader.readAsDataURL(file);
+  } else {
+    showError('Unsupported file type: ' + file.type);
   }
 }
 
-brandBtn.onclick = () => brandInput.click();
-brandInput.onchange = (e) => {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = (ev) => {
-    brandImage = new Image();
-    brandImage.src = ev.target.result;
-    brandImage.onload = () => brandControls.classList.remove('hidden');
-  };
-  reader.readAsDataURL(file);
+function showError(msg) {
+  uploadError.textContent = msg;
+  uploadError.classList.remove('hidden');
+}
+
+function checkReady() {
+  if (audioFile) {
+    startBtn.classList.remove('hidden');
+  }
+}
+
+startBtn.onclick = async () => {
+  loadingOverlay.classList.remove('hidden');
+  try {
+    // We pre-setup the audio context to handle the decoding time
+    await setupAudio(); 
+    dropZone.classList.add('hidden');
+    playBtn.disabled = false;
+    recordBtn.disabled = false;
+    statusBadge.textContent = 'Session Active: ' + audioFile.name;
+  } catch (err) {
+    showError('Error initializing audio: ' + err.message);
+  } finally {
+    loadingOverlay.classList.add('hidden');
+  }
 };
 
 playBtn.onclick = async () => {
@@ -359,7 +403,6 @@ recordBtn.onclick = async () => {
   recordedChunks = [];
   mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
   mediaRecorder.onstop = exportVideo;
-  
   recordingOverlay.style.display = 'flex';
   engineSelect.disabled = true;
   source.start(0);
