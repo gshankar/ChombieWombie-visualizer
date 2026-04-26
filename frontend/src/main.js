@@ -263,16 +263,27 @@ engineSelect.onchange = (e) => {
 styleSelect.onchange = (e) => config.style = e.target.value;
 sensitivitySlider.oninput = (e) => config.sensitivity = e.target.value;
 
+// Drag & Drop
+dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
+dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
+dropZone.ondrop = (e) => {
+  e.preventDefault();
+  dropZone.classList.remove('drag-over');
+  handleFile(e.dataTransfer.files[0]);
+};
+
 fileBtn.onclick = () => fileInput.click();
-fileInput.onchange = (e) => {
-  if (e.target.files[0]) {
-    audioFile = e.target.files[0];
+fileInput.onchange = (e) => handleFile(e.target.files[0]);
+
+function handleFile(file) {
+  if (file && file.type.startsWith('audio/')) {
+    audioFile = file;
     dropZone.classList.add('hidden');
     playBtn.disabled = false;
     recordBtn.disabled = false;
     statusBadge.textContent = 'Ready: ' + audioFile.name;
   }
-};
+}
 
 brandBtn.onclick = () => brandInput.click();
 brandInput.onchange = (e) => {
