@@ -1,14 +1,20 @@
 import './style.css'
 import * as THREE from 'three'
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js'
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js'
-import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js'
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js'
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js'
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js'
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js'
 import { VHSShader, GlitchShader, CRTShader } from './shaders.js'
 import { STYLES, DEFAULT_CONFIG, FEATURE_FLAGS } from './config.js'
 
-// State management
-let audioContext, analyser, dataArray, animationId, audioFile, audioSource;
+// Global Config & State (Absolute Top)
+let config = { ...DEFAULT_CONFIG };
+let audioFile = null;
+let audioContext = null;
+let analyser = null;
+let dataArray = null;
+let animationId = null;
+let audioSource = null;
 let brandImage = null;
 let hueOffset = 0;
 let cycleInterval = null;
@@ -28,128 +34,133 @@ let brandingScene, brandingCamera, logoSprite;
 let vhsPass, glitchPass, crtPass, bloomPass;
 let sphere, terrain, tunnel, stars, bouncingCube, cityContainer;
 
-// DOM Elements
+// Headless Detection
 const isHeadless = new URLSearchParams(window.location.search).get('headless') === 'true';
-const canvas2d = document.getElementById('visualizer-2d'); 
-const ctx2d = canvas2d.getContext('2d');
-const canvas3d = document.getElementById('visualizer-3d');
-const dropZone = document.getElementById('drop-zone');
-const uploadError = document.getElementById('upload-error');
-const loadingOverlay = document.getElementById('loading-overlay');
-const trackInput = document.getElementById('track-input');
-const trackBtn = document.getElementById('track-btn');
-const trackSlot = document.getElementById('track-slot');
-const playBtn = document.getElementById('play-btn');
-const stopPreviewBtn = document.getElementById('stop-preview-btn');
-const recordBtn = document.getElementById('record-btn');
-const statusBadge = document.getElementById('status');
-const engineSelect = document.getElementById('engine-select');
-const styleSelect = document.getElementById('style-select');
-const sensitivitySlider = document.getElementById('sensitivity');
-const colorCycleToggle = document.getElementById('color-cycle-toggle');
-const cycleToggle = document.getElementById('cycle-toggle');
-const cycleSelection = document.getElementById('cycle-selection');
-const cycleStyleList = document.getElementById('cycle-style-list');
-const vhsToggle = document.getElementById('vhs-toggle');
-const crtToggle = document.getElementById('crt-toggle');
-const glitchToggle = document.getElementById('glitch-toggle');
-const brandBtn = document.getElementById('brand-btn');
-const brandInput = document.getElementById('brand-input');
-const brandScale = document.getElementById('brand-scale');
-const brandPos = document.getElementById('brand-pos');
-const brandControls = document.getElementById('brand-controls');
-const brandDropZone = document.getElementById('brand-drop-zone');
-const brandPreview = document.getElementById('brand-preview');
-const renderProgressBar = document.getElementById('render-progress-bar');
-const renderProgressText = document.getElementById('render-progress-text');
-const renderStatusText = document.getElementById('render-status-text');
-const recordingOverlay = document.getElementById('recording-overlay');
 
-// Config
-let config = { ...DEFAULT_CONFIG };
+// Helper
+const get = (id) => document.getElementById(id);
 
-// --- Initialization ---
+// --- Core Initialization ---
 
 function init() {
-  console.log('ChombieWombie Engine Initializing...');
-  updateStyleOptions();
-  updateCycleOptions();
-  initThree();
-  initStyles();
-  attachEventListeners();
-  resize();
-  
-  if (isHeadless) {
-    document.body.classList.add('headless');
-    setupHeadlessAPI();
-  }
+  console.log('ChombieWombie Engine: Initializing UI and Listeners...');
+  try {
+    // 1. Populate UI Options
+    updateStyleOptions();
+    updateCycleOptions();
+    attachEventListeners();
+    console.log('ChombieWombie Engine: UI Ready.');
 
-  if (!FEATURE_FLAGS.enableBranding) {
-    const brandingGroup = document.getElementById('branding-group');
-    if (brandingGroup) brandingGroup.style.display = 'none';
+    // 2. Initialize Rendering Engines
+    initThree();
+    initStyles();
+    resize();
+    
+    if (isHeadless) {
+      document.body.classList.add('headless');
+      setupHeadlessAPI();
+    }
+
+    if (!FEATURE_FLAGS.enableBranding) {
+      const brandingGroup = get('branding-group');
+      if (brandingGroup) brandingGroup.style.display = 'none';
+    }
+    
+    const statusBadge = get('status');
+    if (statusBadge) statusBadge.textContent = 'Ready';
+  } catch (err) {
+    console.error('ChombieWombie Engine: Initialization Failed!', err);
   }
-  
-  statusBadge.textContent = 'Ready';
+}
+
+function updateStyleOptions() { 
+  const styleSelect = get('style-select');
+  if (!styleSelect || !STYLES[config.engine]) return;
+  styleSelect.innerHTML = STYLES[config.engine].map(s => `<option value="${s.id}">${s.name}</option>`).join(''); 
+  config.style = STYLES[config.engine][0].id; 
+}
+
+function updateCycleOptions() { 
+  const cycleStyleList = get('cycle-style-list');
+  if (!cycleStyleList || !STYLES[config.engine]) return;
+  cycleStyleList.innerHTML = STYLES[config.engine].map(s => `<label><input type="checkbox" class="cycle-style" value="${s.id}" checked> ${s.name}</label>`).join(''); 
 }
 
 function attachEventListeners() {
-  engineSelect.onchange = (e) => {
-    config.engine = e.target.value;
-    updateStyleOptions(); updateCycleOptions();
-  };
+  const engineSelect = get('engine-select');
+  const styleSelect = get('style-select');
+  const sensitivitySlider = get('sensitivity');
+  const dropZone = get('drop-zone');
+  const trackBtn = get('track-btn');
+  const trackInput = get('track-input');
+  const playBtn = get('play-btn');
+  const stopPreviewBtn = get('stop-preview-btn');
+  const recordBtn = get('record-btn');
+  const cycleToggle = get('cycle-toggle');
+  const brandBtn = get('brand-btn');
+  const brandInput = get('brand-input');
+  const brandDropZone = get('brand-drop-zone');
 
-  styleSelect.onchange = (e) => config.style = e.target.value;
-  sensitivitySlider.oninput = (e) => config.sensitivity = e.target.value;
+  if (engineSelect) engineSelect.onchange = (e) => { config.engine = e.target.value; updateStyleOptions(); updateCycleOptions(); };
+  if (styleSelect) styleSelect.onchange = (e) => config.style = e.target.value;
+  if (sensitivitySlider) sensitivitySlider.oninput = (e) => config.sensitivity = e.target.value;
 
-  dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
-  dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
-  dropZone.ondrop = (e) => {
-    e.preventDefault(); dropZone.classList.remove('drag-over');
-    handleFile(e.dataTransfer.files[0]);
-  };
+  if (dropZone) {
+    dropZone.ondragover = (e) => { e.preventDefault(); dropZone.classList.add('drag-over'); };
+    dropZone.ondragleave = () => dropZone.classList.remove('drag-over');
+    dropZone.ondrop = (e) => { e.preventDefault(); dropZone.classList.remove('drag-over'); handleFile(e.dataTransfer.files[0]); };
+  }
 
-  trackBtn.onclick = () => trackInput.click();
-  trackInput.onchange = (e) => handleFile(e.target.files[0]);
+  if (trackBtn) trackBtn.onclick = () => trackInput.click();
+  if (trackInput) trackInput.onchange = (e) => handleFile(e.target.files[0]);
 
-  brandBtn.onclick = () => brandInput.click();
-  brandInput.onchange = (e) => handleBrandFile(e.target.files[0]);
+  if (brandBtn) brandBtn.onclick = () => brandInput.click();
+  if (brandInput) brandInput.onchange = (e) => handleBrandFile(e.target.files[0]);
 
-  brandDropZone.ondragover = (e) => { e.preventDefault(); brandDropZone.classList.add('drag-over'); };
-  brandDropZone.ondragleave = () => brandDropZone.classList.remove('drag-over');
-  brandDropZone.ondrop = (e) => {
-    e.preventDefault(); brandDropZone.classList.remove('drag-over');
-    handleBrandFile(e.dataTransfer.files[0]);
-  };
+  if (brandDropZone) {
+    brandDropZone.ondragover = (e) => { e.preventDefault(); brandDropZone.classList.add('drag-over'); };
+    brandDropZone.ondragleave = () => brandDropZone.classList.remove('drag-over');
+    brandDropZone.ondrop = (e) => { e.preventDefault(); brandDropZone.classList.remove('drag-over'); handleBrandFile(e.dataTransfer.files[0]); };
+  }
 
-  playBtn.onclick = handlePlay;
-  stopPreviewBtn.onclick = stopPreview;
-  recordBtn.onclick = handleRecord;
+  if (playBtn) playBtn.onclick = handlePlay;
+  if (stopPreviewBtn) stopPreviewBtn.onclick = stopPreview;
+  if (recordBtn) recordBtn.onclick = handleRecord;
 
   document.querySelectorAll('.palette').forEach(p => {
     p.onclick = () => {
       document.querySelectorAll('.palette').forEach(btn => btn.classList.remove('active'));
-      p.classList.add('active'); config.colors = p.dataset.colors.split(','); colorCycleToggle.checked = false;
+      p.classList.add('active'); config.colors = p.dataset.colors.split(','); 
+      const colorCycleToggle = get('color-cycle-toggle');
+      if (colorCycleToggle) colorCycleToggle.checked = false;
     };
   });
 
-  cycleToggle.onchange = () => {
+  if (cycleToggle) cycleToggle.onchange = () => {
+    const cycleSelection = get('cycle-selection');
     if (cycleToggle.checked) {
-      cycleSelection.classList.remove('hidden');
+      if (cycleSelection) cycleSelection.classList.remove('hidden');
       cycleInterval = setInterval(() => {
         const checkedStyles = Array.from(document.querySelectorAll('.cycle-style')).filter(cb => cb.checked).map(cb => cb.value);
         if (checkedStyles.length > 0) {
           const currentIndex = checkedStyles.indexOf(config.style);
           const nextStyle = checkedStyles[(currentIndex + 1) % checkedStyles.length];
-          config.style = nextStyle; styleSelect.value = nextStyle;
+          config.style = nextStyle; 
+          if (styleSelect) styleSelect.value = nextStyle;
         }
       }, 60000);
     } else {
-      cycleSelection.classList.add('hidden'); clearInterval(cycleInterval);
+      if (cycleSelection) cycleSelection.classList.add('hidden'); 
+      clearInterval(cycleInterval);
     }
   };
 }
 
 function initThree() {
+  const canvas3d = get('visualizer-3d');
+  const canvas2d = get('visualizer-2d');
+  if (!canvas3d || !canvas2d) throw new Error('Required canvas elements not found');
+
   scene = new THREE.Scene();
   camera = new THREE.PerspectiveCamera(75, 1, 0.1, 2000);
   camera.position.z = 10;
@@ -160,6 +171,7 @@ function initThree() {
 
   renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true, preserveDrawingBuffer: true });
   renderer.autoClear = false;
+  renderer.setPixelRatio(window.devicePixelRatio);
 
   composer = new EffectComposer(renderer);
   composer.addPass(new RenderPass(scene, camera));
@@ -212,23 +224,55 @@ function initThree() {
   const p = new THREE.PointLight(0xffffff, 1); p.position.set(10, 10, 10); scene.add(p);
 }
 
-// --- Logic ---
+function initStyles() {
+  mystifyPoints = [];
+  for (let i = 0; i < mystifyCount; i++) {
+    mystifyPoints.push({ x: Math.random() * 1000, y: Math.random() * 1000, vx: (Math.random() - 0.5) * 10, vy: (Math.random() - 0.5) * 10 });
+  }
+}
+
+// --- Handlers ---
 
 function handleFile(file) {
-  if (file && file.type.startsWith('audio/')) {
+  console.log('File received:', file?.name, file?.type);
+  const isAudio = file && (file.type.startsWith('audio/') || /\.(mp3|wav|flac|ogg|m4a)$/i.test(file.name));
+  
+  if (isAudio) {
     audioFile = file;
-    trackSlot.classList.add('ready');
-    trackSlot.querySelector('.slot-status').textContent = 'Received';
-    playBtn.disabled = false; recordBtn.disabled = false;
-    dropZone.querySelector('h2').textContent = 'Session Ready';
-    statusBadge.textContent = 'Armed';
+    const trackSlot = get('track-slot');
+    const playBtn = get('play-btn');
+    const recordBtn = get('record-btn');
+    const dropZone = get('drop-zone');
+    const statusBadge = get('status');
+
+    if (trackSlot) {
+      trackSlot.classList.add('ready');
+      const statusText = trackSlot.querySelector('.slot-status');
+      if (statusText) statusText.textContent = 'Received';
+    }
+    if (playBtn) playBtn.disabled = false;
+    if (recordBtn) recordBtn.disabled = false;
+    
+    if (dropZone) {
+      const h2 = dropZone.querySelector('h2');
+      if (h2) h2.textContent = 'Session Ready';
+    }
+    if (statusBadge) statusBadge.textContent = 'Armed';
+    console.log('Audio file armed:', file.name);
   } else {
-    showError('Please upload a valid audio track.');
+    showError('Please upload a valid audio track (MP3, WAV, etc).');
   }
 }
 
 async function handlePlay() {
-  dropZone.classList.add('hidden'); loadingOverlay.classList.remove('hidden');
+  const dropZone = get('drop-zone');
+  const loadingOverlay = get('loading-overlay');
+  const playBtn = get('play-btn');
+  const stopPreviewBtn = get('stop-preview-btn');
+
+  if (dropZone) dropZone.classList.add('hidden');
+  if (loadingOverlay) loadingOverlay.classList.remove('hidden');
+  
   try {
     if (audioContext) await audioContext.close();
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
@@ -237,51 +281,80 @@ async function handlePlay() {
     audioSource = audioContext.createBufferSource(); audioSource.buffer = audioBuffer;
     audioSource.connect(analyser); analyser.connect(audioContext.destination);
     dataArray = new Uint8Array(analyser.frequencyBinCount);
-    loadingOverlay.classList.add('hidden'); audioSource.start(0); draw();
-    playBtn.disabled = true; stopPreviewBtn.disabled = false;
+    
+    if (loadingOverlay) loadingOverlay.classList.add('hidden');
+    audioSource.start(0); draw();
+    
+    if (playBtn) playBtn.disabled = true;
+    if (stopPreviewBtn) stopPreviewBtn.disabled = false;
     audioSource.onended = stopPreview;
   } catch (err) {
-    showError('Playback failed: ' + err.message); loadingOverlay.classList.add('hidden');
+    showError('Playback failed: ' + err.message);
+    if (loadingOverlay) loadingOverlay.classList.add('hidden');
   }
 }
 
 function stopPreview() {
   if (audioSource) try { audioSource.stop(); } catch(e) {}
   cancelAnimationFrame(animationId);
-  playBtn.disabled = false; stopPreviewBtn.disabled = true;
-  dropZone.classList.remove('hidden');
+  const playBtn = get('play-btn');
+  const stopPreviewBtn = get('stop-preview-btn');
+  const dropZone = get('drop-zone');
+  if (playBtn) playBtn.disabled = false;
+  if (stopPreviewBtn) stopPreviewBtn.disabled = true;
+  if (dropZone) dropZone.classList.remove('hidden');
 }
 
 async function handleRecord() {
-  recordingOverlay.classList.remove('hidden');
-  renderStatusText.textContent = 'Preparing...';
+  const recordingOverlay = get('recording-overlay');
+  const renderStatusText = get('render-status-text');
+  const renderProgressBar = get('render-progress-bar');
+  const renderProgressText = get('render-progress-text');
+  const vhsToggle = get('vhs-toggle');
+  const crtToggle = get('crt-toggle');
+  const glitchToggle = get('glitch-toggle');
+  const colorCycleToggle = get('color-cycle-toggle');
+
+  if (recordingOverlay) recordingOverlay.classList.remove('hidden');
+  if (renderStatusText) renderStatusText.textContent = 'Preparing...';
+  
   try {
     const audioDataMap = await getAudioDataMap();
     const formData = new FormData();
     formData.append('audio', audioFile);
     formData.append('dataMap', JSON.stringify(audioDataMap));
-    formData.append('config', JSON.stringify({ ...config, vhs: vhsToggle.checked, crt: crtToggle.checked, glitch: glitchToggle.checked, colorCycle: colorCycleToggle.checked }));
+    formData.append('config', JSON.stringify({ 
+      ...config, 
+      vhs: vhsToggle?.checked, 
+      crt: crtToggle?.checked, 
+      glitch: glitchToggle?.checked, 
+      colorCycle: colorCycleToggle?.checked 
+    }));
+
     const res = await fetch('http://localhost:3001/api/render-headless', { method: 'POST', body: formData });
     if (!res.ok) throw new Error(await res.text());
     const { jobId } = await res.json();
+    
     const poll = setInterval(async () => {
       const s = await fetch(`http://localhost:3001/api/render-status/${jobId}`);
       if (s.ok) {
         const { status, progress, error } = await s.json();
         if (status === 'rendering') {
-          renderProgressBar.style.width = `${progress}%`;
-          renderProgressText.textContent = `Processing (${progress}%)`;
+          if (renderProgressBar) renderProgressBar.style.width = `${progress}%`;
+          if (renderProgressText) renderProgressText.textContent = `Processing (${progress}%)`;
         } else if (status === 'done') {
-          clearInterval(poll); window.location.href = `http://localhost:3001/api/render-download/${jobId}`;
-          setTimeout(() => recordingOverlay.classList.add('hidden'), 3000);
+          clearInterval(poll);
+          window.location.href = `http://localhost:3001/api/render-download/${jobId}`;
+          setTimeout(() => { if (recordingOverlay) recordingOverlay.classList.add('hidden'); }, 3000);
         } else if (status === 'error') {
           clearInterval(poll); throw new Error(error);
         }
       }
     }, 1000);
   } catch (err) {
-    renderStatusText.textContent = 'Error'; renderProgressText.textContent = err.message;
-    setTimeout(() => recordingOverlay.classList.add('hidden'), 5000);
+    if (renderStatusText) renderStatusText.textContent = 'Error';
+    if (renderProgressText) renderProgressText.textContent = err.message;
+    setTimeout(() => { if (recordingOverlay) recordingOverlay.classList.add('hidden'); }, 5000);
   }
 }
 
@@ -302,60 +375,130 @@ async function getAudioDataMap() {
   return map;
 }
 
+// --- Rendering ---
+
 function draw() {
   animationId = requestAnimationFrame(draw);
   const time = performance.now() * 0.001;
+  const canvas2d = get('visualizer-2d');
+  const ctx2d = canvas2d?.getContext('2d');
+  if (!analyser || !ctx2d) return;
+
   analyser.getByteFrequencyData(dataArray);
   const avg = dataArray.reduce((a,b) => a+b) / dataArray.length;
   const bass = dataArray.slice(0, 10).reduce((a,b) => a+b) / 10;
   smoothAvg += (avg - smoothAvg) * 0.15; smoothBass += (bass - smoothBass) * 0.15;
-  if (colorCycleToggle.checked) { hueOffset = (hueOffset + 0.5) % 360; config.colors = [`hsl(${hueOffset}, 100%, 50%)`, `hsl(${(hueOffset + 60) % 360}, 100%, 50%)` ]; }
-  draw2D(); renderUnified(time);
+  
+  const colorCycleToggle = get('color-cycle-toggle');
+  if (colorCycleToggle?.checked) { 
+    hueOffset = (hueOffset + 0.5) % 360; 
+    config.colors = [`hsl(${hueOffset}, 100%, 50%)`, `hsl(${(hueOffset + 60) % 360}, 100%, 50%)` ]; 
+  }
+  
+  draw2D(ctx2d, canvas2d); 
+  renderUnified(time);
 }
 
-function draw2D() {
-  ctx2d.clearRect(0,0,canvas2d.width,canvas2d.height);
+function draw2D(ctx, canvas) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
   if (config.engine !== '2d') return;
-  const r = Math.min(canvas2d.width, canvas2d.height) / 4;
-  ctx2d.strokeStyle = config.colors[0]; ctx2d.lineWidth = 4;
+  
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.width;
+  const h = canvas.height;
+  const r = Math.min(w, h) / 4;
+  
+  ctx.strokeStyle = config.colors[0]; 
+  ctx.lineWidth = 4 * dpr;
+  ctx.lineCap = 'round';
+
   if (config.style.startsWith('circular')) {
     for (let i = 0; i < dataArray.length; i++) {
-      const h = (dataArray[i]/255) * r * (config.sensitivity/5); const a = (i/dataArray.length)*Math.PI*2;
-      ctx2d.beginPath(); ctx2d.moveTo(canvas2d.width/2 + Math.cos(a)*r, canvas2d.height/2 + Math.sin(a)*r);
-      ctx2d.lineTo(canvas2d.width/2 + Math.cos(a)*(r+h), canvas2d.height/2 + Math.sin(a)*(r+h)); ctx2d.stroke();
+      const barHeight = (dataArray[i]/255) * r * (config.sensitivity/5); 
+      const angle = (i/dataArray.length) * Math.PI * 2;
+      const x1 = w/2 + Math.cos(angle) * r;
+      const y1 = h/2 + Math.sin(angle) * r;
+      const x2 = w/2 + Math.cos(angle) * (r + barHeight);
+      const y2 = h/2 + Math.sin(angle) * (r + barHeight);
+      
+      ctx.beginPath(); 
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2); 
+      ctx.stroke();
     }
   } else if (config.style === 'sunrise') {
-    ctx2d.beginPath(); ctx2d.moveTo(0, canvas2d.height/2); ctx2d.lineTo(canvas2d.width, canvas2d.height/2); ctx2d.stroke();
+    const sunriseY = h / 2;
+    ctx.beginPath(); 
+    ctx.moveTo(0, sunriseY); 
+    ctx.lineTo(w, sunriseY); 
+    ctx.stroke();
   }
 }
 
 function renderUnified(time) {
   const intensity = (smoothAvg/255)*config.sensitivity;
   const is3D = config.engine === '3d';
-  sphere.visible = is3D && config.style === '3d-sphere';
-  terrain.visible = is3D && config.style === '3d-terrain';
-  tunnel.visible = is3D && config.style === '3d-tunnel';
-  stars.visible = is3D && config.style === '3d-stars';
-  bouncingCube.visible = is3D && config.style === '3d-cube';
-  cityContainer.visible = is3D && config.style === '3d-city';
-  canvasPlane.visible = !is3D;
-  if (canvasPlane.visible) { canvasTexture.needsUpdate = true; canvasPlane.scale.set(camera.aspect * 15, 15, 1); }
-  if (is3D) { camera.position.set(Math.sin(time*0.5)*15, 0, Math.cos(time*0.5)*15); camera.lookAt(0,0,0); }
-  if (sphere.visible) { sphere.rotation.y += 0.01; sphere.material.color.set(config.colors[0]); }
-  vhsPass.enabled = vhsToggle.checked; crtPass.enabled = crtToggle.checked; glitchPass.enabled = glitchToggle.checked;
-  bloomPass.strength = 1.2 + (smoothBass/255)*0.8;
-  renderer.clear(); composer.render();
+  if (sphere) sphere.visible = is3D && config.style === '3d-sphere';
+  if (terrain) terrain.visible = is3D && config.style === '3d-terrain';
+  if (tunnel) tunnel.visible = is3D && config.style === '3d-tunnel';
+  if (stars) stars.visible = is3D && config.style === '3d-stars';
+  if (bouncingCube) bouncingCube.visible = is3D && config.style === '3d-cube';
+  if (cityContainer) cityContainer.visible = is3D && config.style === '3d-city';
+  if (canvasPlane) {
+    canvasPlane.visible = !is3D;
+    if (canvasPlane.visible && canvasTexture) { canvasTexture.needsUpdate = true; canvasPlane.scale.set(camera.aspect * 15, 15, 1); }
+  }
+  if (is3D && camera) { camera.position.set(Math.sin(time*0.5)*15, 0, Math.cos(time*0.5)*15); camera.lookAt(0,0,0); }
+  if (sphere?.visible) { sphere.rotation.y += 0.01; sphere.material.color.set(config.colors[0]); }
+  
+  const vhsToggle = get('vhs-toggle');
+  const crtToggle = get('crt-toggle');
+  const glitchToggle = get('glitch-toggle');
+  if (vhsPass) vhsPass.enabled = vhsToggle?.checked;
+  if (crtPass) crtPass.enabled = crtToggle?.checked;
+  if (glitchPass) glitchPass.enabled = glitchToggle?.checked;
+  if (bloomPass) bloomPass.strength = 1.2 + (smoothBass/255)*0.8;
+  
+  if (renderer && composer) { renderer.clear(); composer.render(); }
 }
 
 function resize() {
-  const w = canvas3d.parentElement.offsetWidth; const h = canvas3d.parentElement.offsetHeight;
-  renderer.setSize(w, h); camera.aspect = w/h; camera.updateProjectionMatrix();
-  canvas2d.width = w; canvas2d.height = h;
+  const canvas3d = get('visualizer-3d');
+  const canvas2d = get('visualizer-2d');
+  if (!canvas3d || !canvas2d || !canvas3d.parentElement) return;
+  
+  const w = canvas3d.parentElement.offsetWidth; 
+  const h = canvas3d.parentElement.offsetHeight;
+  const dpr = window.devicePixelRatio || 1;
+
+  if (renderer) {
+    renderer.setSize(w, h);
+    renderer.setPixelRatio(dpr);
+  }
+  if (composer) composer.setSize(w, h);
+  if (camera) { camera.aspect = w/h; camera.updateProjectionMatrix(); }
+  
+  canvas2d.width = w * dpr; 
+  canvas2d.height = h * dpr;
 }
 
-function updateStyleOptions() { styleSelect.innerHTML = STYLES[config.engine].map(s => `<option value="${s.id}">${s.name}</option>`).join(''); config.style = STYLES[config.engine][0].id; }
-function updateCycleOptions() { cycleStyleList.innerHTML = STYLES[config.engine].map(s => `<label><input type="checkbox" class="cycle-style" value="${s.id}" checked> ${s.name}</label>`).join(''); }
-function showError(m) { uploadError.textContent = m; uploadError.classList.remove('hidden'); }
-function setupHeadlessAPI() { window.renderFrame = async (idx, data, cfg, time) => { config = { ...config, ...cfg }; dataArray = new Uint8Array(data); draw2D(); renderUnified(time); return canvas3d.toDataURL(); }; }
+function showError(m) { 
+  const uploadError = get('upload-error');
+  if (uploadError) { uploadError.textContent = m; uploadError.classList.remove('hidden'); }
+}
 
+function setupHeadlessAPI() { 
+  const canvas3d = get('visualizer-3d');
+  window.renderFrame = async (idx, data, cfg, time) => { 
+    config = { ...config, ...cfg }; 
+    dataArray = new Uint8Array(data); 
+    const canvas2d = get('visualizer-2d');
+    const ctx2d = canvas2d?.getContext('2d');
+    draw2D(ctx2d, canvas2d); 
+    renderUnified(time); 
+    return canvas3d.toDataURL(); 
+  }; 
+}
+
+// Start Engine
 init();
