@@ -1,57 +1,64 @@
 # Feature Deep Dive: ChombieWombie Visualizer 💎
 
-This document provides a detailed breakdown of the technical features and creative options available in ChombieWombie.
+This document provides a technical breakdown of the advanced features and rendering logic implemented in the ChombieWombie Visualizer.
 
 ---
 
-## 🏎️ Rendering Engines
+## 🏎️ Specialized Rendering Engines
 
-### 2D Classic (Canvas API)
-Built for speed and clarity. The 2D engine is perfect for "Sharp" visuals that need to stand out on high-resolution displays.
-- **Circular Spectrum**: Maps audio frequencies to a ring. Supports **Outward**, **Inward**, and **Dual** (symmetry) modes.
-- **Linear Bars**: A traditional frequency-bin bar chart, grounded at the bottom of the screen.
-- **Oscilloscope**: A real-time waveform representation of the audio signal.
+### 1. Classic 2D Engine (Canvas API)
+Built for high-contrast clarity and sharp vector movement.
+- **Neon Sunrise**: A centered circular spectrum with a pinned horizon water-line.
+- **Neon Mystify**: A bouncing geometric web with audio-reactive thickness.
+- **Cyber Plasma**: Sine-wave based fluid color fields that morph in size and frequency.
+- **Circular Dual**: Symmetrical frequency mapping for a perfectly balanced "pulse."
 
-### 3D Retro (Three.js / WebGL)
-An immersive environment with depth, lighting, and camera movement.
-- **Audio Sphere**: A pulsing icosahedron that scales with bass and glows based on overall intensity.
-- **Retro Terrain**: A wireframe plane that undulates with radial waves driven by the audio spectrum.
-- **Hyper Tunnel**: A reactive cylinder that creates a "speeding" effect through a neon grid.
-
----
-
-## 🎬 Video Export Engine
-
-ChombieWombie uses a hybrid approach for video generation:
-1. **Real-time Capture**: Uses `canvas.captureStream(60)` to record frames directly from the browser's GPU at 60FPS.
-2. **Audio Merging**: The audio is captured from a `MediaStreamAudioDestinationNode` to ensure zero sync-drift.
-3. **Backend Transcoding**: The raw WebM stream is sent to a Node.js backend where **FFmpeg** performs a high-quality transcode to H.264 (MP4) with AAC audio.
+### 2. Immersive 3D Engine (Three.js / WebGL)
+A cinematographic environment with physics-based reactivity.
+- **Neon Sphere**: An icosahedron that features real-time vertex distortion and vibration instead of simple scaling.
+- **Grid Runner**: An endless wireframe city skyline with a "Director Tracking" camera. Building heights are synced to the sub-bass range.
+- **Bouncing Cube**: A thick-line wireframe cube with boundary-locked physics.
+- **Cyber Starfield**: A high-speed particle journey with velocity mapped to the track's intensity.
 
 ---
 
-## 📟 Post-Processing Filters (Shaders)
+## 📟 Advanced Post-Processing (Shader Pipeline)
 
-These filters are applied directly to the 3D scene using Three.js `EffectComposer`:
+The visualizer uses a multi-pass shader chain with **Additive Light Logic** to prevent image dimming.
 
-| Filter | Effect | Logic |
+| Filter | Logic | Brightness Strategy |
 | :--- | :--- | :--- |
-| **VHS** | Nostalgic analog distortion | RGB chromatic aberration, scan-line noise, and slight color bleeding. |
-| **CRT** | 80s monitor simulation | Screen curvature (barrel distortion) and phosphor scanlines. |
-| **Glitch** | Digital chaos | Random displacement and strobe effects. Can be toggled manually or set to trigger automatically on heavy bass drops. |
+| **VHS** | RGB Chromatic Aberration | Uses **Additive Scanlines** that add light rather than subtracting it. |
+| **CRT** | Barrel Distortion | Reduced curvature with a subtle, non-darkening vignette and high-res phosphorus lines. |
+| **Glitch** | Beat-Synced Artifacts | Automatically triggers during massive audio peaks (>220 bass threshold). |
+
+**Luminous Pipeline**: The `UnrealBloomPass` is positioned at the **end** of the chain. This allows the bloom to catch the "Additive" light from the shaders, making the entire scene feel significantly more vibrant and neon-saturated.
 
 ---
 
-## 🏷️ Branding & Customization
+## 🎥 Cinematic Motion System
 
-- **Watermark System**: Supports any image format (PNG, JPG, SVG). The logo is rendered as a 2D overlay on top of both the 2D and 3D engines.
-- **Positioning**: Fixed grid positioning (Top-Left, Top-Right, Bottom-Left, Bottom-Right, Center).
-- **Color Cycling**: Uses HSL hue rotation to smoothly transition the entire visualizer's color scheme over time, creating a rainbow effect.
+- **Director Camera Paths**: Each 3D style has a dedicated camera script (e.g., Orbit for Sphere, Hover for Terrain, Tracking for Cube).
+- **LERP Smoothing**: All audio reactivity is processed through a Linear Interpolation (LERP) filter to ensure that visuals "thump" with the beat but remain smooth and professional during transitions.
+- **Intensity Mapping**: Frequencies are split into **Bass** (0-10 bins) and **Average** to allow for differentiated visual reactions (e.g., scaling vs. distortion).
 
 ---
 
-## 🧪 Stability & Testing
+## 🎬 Technical Export Stack
 
-- **Engine Lock**: To prevent WebGL context crashes, the rendering engine is locked during active playback/recording.
-- **Unit Testing**: 
-    - **Frontend**: Vitest ensures that style configurations and UI mappings are correct.
-    - **Backend**: Supertest verifies the encoding API status and error handling.
+1. **GPU Capture**: `canvas.captureStream(60)` records 60FPS frames directly from the WebGL context.
+2. **Audio Injection**: `MediaStreamAudioDestinationNode` captures internal audio with zero latency.
+3. **High-Bitrate Encoding**: The backend uses **FFmpeg** with the following parameters:
+   - **Video**: H.264 (MP4) with a 12Mbps bitrate for YouTube clarity.
+   - **Audio**: AAC at 320kbps for audiophile-grade sound quality.
+
+---
+
+## 🏷️ Brand Identity
+
+- **Typography**: Uses the **Permanent Marker** brush font for a gritty, professional aesthetic.
+- **Luminous Glow**: All branding elements feature a cyan `text-shadow` or `glow` pass to integrate them into the neon environment.
+
+---
+
+Developed for the ChombieWombie music ecosystem.

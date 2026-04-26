@@ -1,161 +1,171 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ChombieWombie | Music Visualizer</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Permanent+Marker&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="/style.css">
-  </head>
-  <body>
-    <div id="app">
-      <div class="background-mesh"></div>
-      
-      <header>
-        <div class="logo">CHOMBIE<span>WOMBIE</span></div>
-        <div class="status-badge" id="status">Ready</div>
-      </header>
 
-      <main>
-        <div class="visualizer-container">
-          <canvas id="visualizer-2d" class="hidden"></canvas>
-          <canvas id="visualizer-3d"></canvas>
-          <div class="drop-zone" id="drop-zone">
-            <div class="drop-content">
-              <div class="icon">🚀</div>
-              <h2>Prepare Your Session</h2>
-              <p>Upload your audio track to begin</p>
-              
-              <div class="upload-slots">
-                <div class="upload-slot" id="track-slot">
-                  <div class="slot-icon">🎵</div>
-                  <button class="btn-primary" id="track-btn">Upload Track</button>
-                  <span class="slot-status">Waiting...</span>
-                </div>
-              </div>
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ChombieWombie | Music Visualizer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&family=Permanent+Marker&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/style.css">
+</head>
 
-              <div id="upload-error" class="error-msg hidden"></div>
-              
-              <input type="file" id="track-input" accept="audio/*" hidden />
-            </div>
-          </div>
-        </div>
+<body>
+  <div id="app">
+    <div class="background-mesh"></div>
 
-        <div class="controls-panel">
-          <div class="control-group">
-            <label>Sensitivity</label>
-            <input type="range" id="sensitivity" min="1" max="10" value="5" />
-          </div>
-          <div class="control-group">
-            <label>Color Palette</label>
-            <div class="palette-picker">
-              <button class="palette active" data-colors="#00f2ff,#ff00ea" style="background: linear-gradient(45deg, #00f2ff, #ff00ea)"></button>
-              <button class="palette" data-colors="#7000ff,#00ff88" style="background: linear-gradient(45deg, #7000ff, #00ff88)"></button>
-              <button class="palette" data-colors="#ff8c00,#ff0000" style="background: linear-gradient(45deg, #ff8c00, #ff0000)"></button>
-              <button class="palette" data-colors="#4dff00,#00ff88" style="background: linear-gradient(45deg, #4dff00, #00ff88)"></button>
-              <button class="palette" data-colors="#00fff2,#0059ff" style="background: linear-gradient(45deg, #00fff2, #0059ff)"></button>
-              <button class="palette" data-colors="#ffffff,#888888" style="background: linear-gradient(45deg, #ffffff, #888888)"></button>
-            </div>
-            <div class="toggle-control" style="margin-top: 1rem;">
-              <label>Cycle Colors</label>
-              <input type="checkbox" id="color-cycle-toggle" />
-            </div>
-          </div>
-          <div class="control-group">
-            <label>Rendering Engine</label>
-            <select id="engine-select">
-              <option value="2d">Classic 2D Engine</option>
-              <option value="3d">Immersive 3D Engine</option>
-            </select>
-          </div>
+    <header>
+      <div class="logo">CHOMBIEWOMBIE <span>Visualizer</span></div>
+      <div class="status-badge" id="status">Ready</div>
+    </header>
 
-          <div class="control-group">
-            <label>Visual Style</label>
-            <select id="style-select">
-              <!-- Options populated by JS based on engine -->
-            </select>
-          </div>
+    <main>
+      <div class="visualizer-container">
+        <canvas id="visualizer-2d" class="hidden"></canvas>
+        <canvas id="visualizer-3d"></canvas>
+        <div class="drop-zone" id="drop-zone">
+          <div class="drop-content">
+            <div class="icon">🚀</div>
+            <h2>Visualize your Mixes</h2>
+            <p>Upload your audio track to begin</p>
 
-          <div class="control-group">
-            <div class="toggle-control">
-              <label>Cycle Visuals</label>
-              <input type="checkbox" id="cycle-toggle" />
-            </div>
-            <div id="cycle-selection" class="hidden">
-              <div id="cycle-style-list" class="style-checkboxes">
-                <!-- Dynamically populated -->
+            <div class="upload-slots">
+              <div class="upload-slot" id="track-slot">
+                <div class="slot-icon">🎵</div>
+                <button class="btn-primary" id="track-btn">Upload Track</button>
+                <span class="slot-status">Waiting...</span>
               </div>
             </div>
-          </div>
 
-          <div class="control-group">
-            <label>Retro Filters</label>
-            <div class="toggle-control">
-              <label>VHS Mode</label>
-              <input type="checkbox" id="vhs-toggle" />
-            </div>
-            <div class="toggle-control">
-              <label>CRT Scanlines</label>
-              <input type="checkbox" id="crt-toggle" />
-            </div>
-            <div class="toggle-control">
-              <label>Glitch Effect</label>
-              <input type="checkbox" id="glitch-toggle" />
-            </div>
-          </div>
+            <div id="upload-error" class="error-msg hidden"></div>
 
-          <div class="control-group" id="branding-group" style="display: none;">
-            <label>Session Branding</label>
-            <div id="brand-drop-zone" class="drop-zone mini">
-              <img id="brand-preview" class="hidden" alt="Logo Preview" />
-              <button class="btn-secondary" id="brand-btn">Upload Logo</button>
-              <p class="hint">or drag & drop</p>
-            </div>
-            <input type="file" id="brand-input" accept="image/*" hidden />
-            <div id="brand-controls" class="hidden">
-              <div class="sub-control">
-                <span>Position</span>
-                <select id="brand-pos">
-                  <option value="top-right">Top Right</option>
-                  <option value="top-left">Top Left</option>
-                  <option value="bottom-right">Bottom Right</option>
-                  <option value="bottom-left">Bottom Left</option>
-                  <option value="center">Center</option>
-                </select>
-              </div>
-              <div class="sub-control">
-                <span>Scale</span>
-                <input type="range" id="brand-scale" min="10" max="50" value="20" />
-              </div>
-            </div>
+            <input type="file" id="track-input" accept="audio/*" hidden />
           </div>
-          
-          <div class="action-buttons">
-            <button class="btn-record" id="record-btn" disabled>
-              <span class="pulse"></span>
-              Record Video
-            </button>
-            <div class="preview-controls">
-              <button class="btn-secondary" id="play-btn" disabled>Play</button>
-              <button class="btn-secondary" id="stop-preview-btn" disabled>Stop</button>
-            </div>
-          </div>
-        </div>
-      </main>
-
-      <div class="loading-overlay hidden" id="loading-overlay">
-        <div class="loading-content">
-          <div class="spinner"></div>
-          <h3>Initializing Engine...</h3>
-          <p>Decoding audio and preparing 3D assets</p>
         </div>
       </div>
 
-      <div class="recording-overlay hidden" id="recording-overlay">
+      <div class="controls-panel">
+        <div class="control-group">
+          <label>Sensitivity</label>
+          <input type="range" id="sensitivity" min="1" max="10" value="5" />
+        </div>
+        <div class="control-group">
+          <label>Color Palette</label>
+          <div class="palette-picker">
+            <button class="palette active" data-colors="#00f2ff,#ff00ea"
+              style="background: linear-gradient(45deg, #00f2ff, #ff00ea)"></button>
+            <button class="palette" data-colors="#7000ff,#00ff88"
+              style="background: linear-gradient(45deg, #7000ff, #00ff88)"></button>
+            <button class="palette" data-colors="#ff8c00,#ff0000"
+              style="background: linear-gradient(45deg, #ff8c00, #ff0000)"></button>
+            <button class="palette" data-colors="#4dff00,#00ff88"
+              style="background: linear-gradient(45deg, #4dff00, #00ff88)"></button>
+            <button class="palette" data-colors="#00fff2,#0059ff"
+              style="background: linear-gradient(45deg, #00fff2, #0059ff)"></button>
+            <button class="palette" data-colors="#ffffff,#888888"
+              style="background: linear-gradient(45deg, #ffffff, #888888)"></button>
+          </div>
+          <div class="toggle-control" style="margin-top: 1rem;">
+            <label>Cycle Colors</label>
+            <input type="checkbox" id="color-cycle-toggle" />
+          </div>
+        </div>
+        <div class="control-group">
+          <label>Rendering Engine</label>
+          <select id="engine-select">
+            <option value="2d">Classic 2D Engine</option>
+            <option value="3d">Immersive 3D Engine</option>
+          </select>
+        </div>
+
+        <div class="control-group">
+          <label>Visual Style</label>
+          <select id="style-select">
+            <!-- Options populated by JS based on engine -->
+          </select>
+        </div>
+
+        <div class="control-group">
+          <div class="toggle-control">
+            <label>Cycle Visuals</label>
+            <input type="checkbox" id="cycle-toggle" />
+          </div>
+          <div id="cycle-selection" class="hidden">
+            <div id="cycle-style-list" class="style-checkboxes">
+              <!-- Dynamically populated -->
+            </div>
+          </div>
+        </div>
+
+        <div class="control-group">
+          <label>Retro Filters</label>
+          <div class="toggle-control">
+            <label>VHS Mode</label>
+            <input type="checkbox" id="vhs-toggle" />
+          </div>
+          <div class="toggle-control">
+            <label>CRT Scanlines</label>
+            <input type="checkbox" id="crt-toggle" />
+          </div>
+          <div class="toggle-control">
+            <label>Glitch Effect</label>
+            <input type="checkbox" id="glitch-toggle" />
+          </div>
+        </div>
+
+        <div class="control-group" id="branding-group" style="display: none;">
+          <label>Session Branding</label>
+          <div id="brand-drop-zone" class="drop-zone mini">
+            <img id="brand-preview" class="hidden" alt="Logo Preview" />
+            <button class="btn-secondary" id="brand-btn">Upload Logo</button>
+            <p class="hint">or drag & drop</p>
+          </div>
+          <input type="file" id="brand-input" accept="image/*" hidden />
+          <div id="brand-controls" class="hidden">
+            <div class="sub-control">
+              <span>Position</span>
+              <select id="brand-pos">
+                <option value="top-right">Top Right</option>
+                <option value="top-left">Top Left</option>
+                <option value="bottom-right">Bottom Right</option>
+                <option value="bottom-left">Bottom Left</option>
+                <option value="center">Center</option>
+              </select>
+            </div>
+            <div class="sub-control">
+              <span>Scale</span>
+              <input type="range" id="brand-scale" min="10" max="50" value="20" />
+            </div>
+          </div>
+        </div>
+
+        <div class="action-buttons">
+          <button class="btn-record" id="record-btn" disabled>
+            <span class="pulse"></span>
+            Record Video
+          </button>
+          <div class="preview-controls">
+            <button class="btn-secondary" id="play-btn" disabled>Play</button>
+            <button class="btn-secondary" id="stop-preview-btn" disabled>Stop</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <div class="loading-overlay hidden" id="loading-overlay">
+      <div class="loading-content">
+        <div class="spinner"></div>
+        <h3>Initializing Engine...</h3>
+        <p>Get ready for awesomeness!</p>
+      </div>
+    </div>
+
+    <div class="recording-overlay hidden" id="recording-overlay">
     </div>
     <script type="module" src="/src/main.js"></script>
-  </body>
+</body>
+
 </html>
