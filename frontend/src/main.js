@@ -416,25 +416,74 @@ function resize() {
 // --- Headless / Studio Render ---
 
 async function handleRecord() {
-  get('recording-overlay').classList.remove('hidden'); get('render-status-text').textContent = 'Analyzing...';
+  if (!audioFile) return showError('Upload a track first');
+  
+  get('recording-overlay').classList.remove('hidden');
+  get('render-progress-bar').style.width = '0%';
+  get('render-status-text').textContent = 'Phase 1: Analyzing Audio...';
+  
   try {
-    const map = await getAudioDataMap();
-    const fd = new FormData(); fd.append('audio', audioFile); fd.append('dataMap', JSON.stringify(map));
-    fd.append('config', JSON.stringify({ ...config, vhs: get('vhs-toggle').checked, crt: get('crt-toggle').checked, glitch: get('glitch-toggle').checked }));
-    const res = await fetch('http://localhost:3001/api/render-headless', { method: 'POST', body: fd });
+    const map = await getAudioDataMap((progress) => {
+      get('render-progress-bar').style.width = `${progress * 0.2}%`; // Analysis is first 20%
+      get('render-progress-text').textContent = `Analyzing frequencies (${Math.round(progress)}%)`;
+    });
+
+    get('render-status-text').textContent = 'Phase 2: Initializing Headless Render...';
+    
+    const fd = new FormData();
+    fd.append('audio', audioFile);
+    fd.append('dataMap', JSON.stringify(map));
+    fd.append('config', JSON.stringify({ 
+      ...config, 
+      vhs: get('vhs-toggle').checked, 
+      crt: get('crt-toggle').checked, 
+      glitch: get('glitch-toggle').checked 
+    }));
+
+    const res = await fetch('http://localhost:3001/api/render-headless', { 
+      method: 'POST', 
+      body: fd 
+    });
+
+    if (!res.ok) throw new Error(await res.text());
+
     const { jobId } = await res.json();
+    let startTime = Date.now();
+
     const poll = setInterval(async () => {
-      const s = await fetch(`http://localhost:3001/api/render-status/${jobId}`);
-      if (s.ok) {
-        const { status, progress } = await s.json();
-        if (status === 'rendering') { get('render-progress-bar').style.width = `${progress}%`; get('render-progress-text').textContent = `Processing (${progress}%)`; }
-        else if (status === 'done') { clearInterval(poll); window.location.href=`http://localhost:3001/api/render-download/${jobId}`; setTimeout(() => get('recording-overlay').classList.add('hidden'), 3000); }
+      try {
+        const s = await fetch(`http://localhost:3001/api/render-status/${jobId}`);
+        if (s.ok) {
+          const { status, progress, error } = await s.json();
+          if (status === 'rendering') {
+            const totalProgress = 20 + (progress * 0.8); // Rendering is remaining 80%
+            get('render-progress-bar').style.width = `${totalProgress}%`;
+            get('render-progress-text').textContent = `Rendering Frames (${progress}%)`;
+            get('render-status-text').textContent = 'Phase 3: Visual Synthesis in Progress...';
+          } else if (status === 'done') {
+            clearInterval(poll);
+            get('render-progress-bar').style.width = '100%';
+            get('render-progress-text').textContent = 'Export Complete!';
+            get('render-status-text').textContent = 'Preparing Download...';
+            window.location.href = `http://localhost:3001/api/render-download/${jobId}`;
+            setTimeout(() => get('recording-overlay').classList.add('hidden'), 3000);
+          } else if (status === 'error') {
+            throw new Error(error);
+          }
+        }
+      } catch (pollErr) {
+        clearInterval(poll);
+        showError(`Render failed: ${pollErr.message}`);
+        get('recording-overlay').classList.add('hidden');
       }
-    }, 1000);
-  } catch (err) { showError('Render failed'); get('recording-overlay').classList.add('hidden'); }
+    }, 1500);
+  } catch (err) {
+    showError(`Studio Render Error: ${err.message}`);
+    get('recording-overlay').classList.add('hidden');
+  }
 }
 
-async function getAudioDataMap() {
+async function getAudioDataMap(onProgress) {
   const tCtx = new (window.AudioContext || window.webkitAudioContext)();
   const buf = await tCtx.decodeAudioData(await audioFile.arrayBuffer());
   const oCtx = new OfflineAudioContext(1, Math.ceil(buf.duration * 44100), 44100);
@@ -447,6 +496,7 @@ async function getAudioDataMap() {
     await oCtx.suspend(i / fps);
     const data = new Uint8Array(ans.frequencyBinCount); ans.getByteFrequencyData(data);
     map.push(Array.from(data)); oCtx.resume();
+    if (i % 100 === 0 && onProgress) onProgress((i / total) * 100);
   }
   return map;
 }
