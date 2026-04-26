@@ -2,7 +2,8 @@ export const VHSShader = {
   uniforms: {
     "tDiffuse": { value: null },
     "time": { value: 0.0 },
-    "amount": { value: 0.5 }
+    "amount": { value: 0.5 },
+    "brightness": { value: 1.0 }
   },
   vertexShader: `
     varying vec2 vUv;
@@ -15,6 +16,7 @@ export const VHSShader = {
     uniform sampler2D tDiffuse;
     uniform float time;
     uniform float amount;
+    uniform float brightness;
     varying vec2 vUv;
     
     void main() {
@@ -26,10 +28,11 @@ export const VHSShader = {
       float g = texture2D(tDiffuse, uv).g;
       float b = texture2D(tDiffuse, uv - vec2(d, 0.0)).b;
       
-      // Simple Scanlines
-      float scanline = sin(uv.y * 800.0 + time * 10.0) * 0.04;
+      // Subtle Scanlines (Less darkening)
+      float scanline = sin(uv.y * 800.0 + time * 10.0) * 0.02;
       
-      gl_FragColor = vec4(r - scanline, g - scanline, b - scanline, 1.0);
+      vec4 color = vec4(r - scanline, g - scanline, b - scanline, 1.0);
+      gl_FragColor = color * brightness;
     }
   `
 };
@@ -38,7 +41,8 @@ export const GlitchShader = {
   uniforms: {
     "tDiffuse": { value: null },
     "time": { value: 0.0 },
-    "byp": { value: 0 }
+    "byp": { value: 0 },
+    "brightness": { value: 1.0 }
   },
   vertexShader: `
     varying vec2 vUv;
@@ -51,6 +55,7 @@ export const GlitchShader = {
     uniform sampler2D tDiffuse;
     uniform float time;
     uniform int byp;
+    uniform float brightness;
     varying vec2 vUv;
     
     void main() {
@@ -63,7 +68,7 @@ export const GlitchShader = {
       if (sin(time) > 0.98) {
         uv.x += g;
       }
-      gl_FragColor = texture2D(tDiffuse, uv);
+      gl_FragColor = texture2D(tDiffuse, uv) * brightness;
     }
   `
 };
@@ -71,7 +76,8 @@ export const GlitchShader = {
 export const CRTShader = {
   uniforms: {
     "tDiffuse": { value: null },
-    "time": { value: 0.0 }
+    "time": { value: 0.0 },
+    "brightness": { value: 1.0 }
   },
   vertexShader: `
     varying vec2 vUv;
@@ -83,6 +89,7 @@ export const CRTShader = {
   fragmentShader: `
     uniform sampler2D tDiffuse;
     uniform float time;
+    uniform float brightness;
     varying vec2 vUv;
     
     void main() {
@@ -90,7 +97,7 @@ export const CRTShader = {
       
       // Curvature
       vec2 dc = uv - 0.5;
-      uv = uv + dc * dot(dc, dc) * 0.1;
+      uv = uv + dc * dot(dc, dc) * 0.05; // Reduced curvature
       
       if (uv.y > 1.0 || uv.x > 1.0 || uv.x < 0.0 || uv.y < 0.0) {
         gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
@@ -99,15 +106,15 @@ export const CRTShader = {
 
       vec4 color = texture2D(tDiffuse, uv);
       
-      // Scanlines
-      float s = sin(uv.y * 1200.0) * 0.05;
+      // Scanlines (Subtle)
+      float s = sin(uv.y * 1200.0) * 0.03;
       color.rgb -= s;
       
-      // Vignette
-      float v = 1.0 - dot(dc, dc) * 1.5;
+      // Subtle Vignette
+      float v = 1.0 - dot(dc, dc) * 0.8;
       color.rgb *= v;
       
-      gl_FragColor = color;
+      gl_FragColor = color * brightness;
     }
   `
 };
