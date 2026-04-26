@@ -1,15 +1,17 @@
 export const STYLES = {
   '2d': [
-    { id: 'circular', name: 'Circular: Outward' },
-    { id: 'circular-inner', name: 'Circular: Inward' },
-    { id: 'circular-dual', name: 'Circular: Dual' },
+    { id: 'circular', name: 'Circular Out' },
+    { id: 'circular-inner', name: 'Circular In' },
+    { id: 'circular-dual', name: 'Circular Dual' },
+    { id: 'sunrise', name: 'Neon Sunrise' },
     { id: 'bars', name: 'Linear Bars' },
     { id: 'wave', name: 'Oscilloscope' }
   ],
   '3d': [
-    { id: '3d-sphere', name: '3D: Audio Sphere' },
-    { id: '3d-terrain', name: '3D: Retro Terrain' },
-    { id: '3d-tunnel', name: '3D: Hyper Tunnel' }
+    { id: '3d-sphere', name: 'Neon Sphere' },
+    { id: '3d-terrain', name: 'Grid Terrain' },
+    { id: '3d-tunnel', name: 'Warp Tunnel' },
+    { id: '3d-stars', name: 'Cyber Starfield' }
   ]
 };
 

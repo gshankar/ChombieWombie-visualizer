@@ -15,13 +15,17 @@ let brandImage = null;
 let hueOffset = 0;
 let cycleInterval = null;
 
+// Audio Reactivity Smoothing
+let smoothAvg = 0;
+let smoothBass = 0;
+
 // Dual Engine Support
 const canvas2d = document.getElementById('visualizer-2d');
 const ctx2d = canvas2d.getContext('2d');
 const canvas3d = document.getElementById('visualizer-3d');
 let scene, camera, renderer, composer;
 let vhsPass, glitchPass, crtPass;
-let sphere, terrain, tunnel, logoSprite;
+let sphere, terrain, tunnel, stars, logoSprite;
 
 // DOM Elements
 const dropZone = document.getElementById('drop-zone');
@@ -44,7 +48,7 @@ const sensitivitySlider = document.getElementById('sensitivity');
 const colorCycleToggle = document.getElementById('color-cycle-toggle');
 const cycleToggle = document.getElementById('cycle-toggle');
 const cycleSelection = document.getElementById('cycle-selection');
-const cycleStyleCheckboxes = document.querySelectorAll('.cycle-style');
+const cycleStyleList = document.getElementById('cycle-style-list');
 
 const vhsToggle = document.getElementById('vhs-toggle');
 const crtToggle = document.getElementById('crt-toggle');
@@ -65,6 +69,7 @@ let config = { ...DEFAULT_CONFIG };
 
 function init() {
   updateStyleOptions();
+  updateCycleOptions();
   initThree();
   resize();
 }
@@ -72,6 +77,12 @@ function init() {
 function updateStyleOptions() {
   styleSelect.innerHTML = STYLES[config.engine].map(s => `<option value="${s.id}">${s.name}</option>`).join('');
   config.style = STYLES[config.engine][0].id;
+}
+
+function updateCycleOptions() {
+  cycleStyleList.innerHTML = STYLES[config.engine].map(s => `
+    <label><input type="checkbox" class="cycle-style" value="${s.id}" checked> ${s.name}</label>
+  `).join('');
 }
 
 function resize() {
@@ -95,8 +106,8 @@ window.addEventListener('resize', resize);
 
 function initThree() {
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
-  camera.position.z = 5;
+  camera = new THREE.PerspectiveCamera(75, 1, 0.1, 2000);
+  camera.position.z = 10;
 
   renderer = new THREE.WebGLRenderer({ canvas: canvas3d, antialias: true, alpha: true });
   composer = new EffectComposer(renderer);
@@ -108,19 +119,29 @@ function initThree() {
   glitchPass = new ShaderPass(GlitchShader); glitchPass.enabled = false; composer.addPass(glitchPass);
   crtPass = new ShaderPass(CRTShader); crtPass.enabled = false; composer.addPass(crtPass);
 
-  sphere = new THREE.Mesh(new THREE.IcosahedronGeometry(1.5, 32), new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true }));
+  sphere = new THREE.Mesh(new THREE.IcosahedronGeometry(2.5, 32), new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true }));
   scene.add(sphere);
 
-  terrain = new THREE.Mesh(new THREE.PlaneGeometry(40, 40, 32, 32), new THREE.MeshPhongMaterial({ color: config.colors[1], wireframe: true, side: THREE.DoubleSide }));
-  terrain.rotation.x = -Math.PI / 2; terrain.position.y = -3;
+  terrain = new THREE.Mesh(new THREE.PlaneGeometry(100, 100, 32, 32), new THREE.MeshPhongMaterial({ color: config.colors[1], wireframe: true, side: THREE.DoubleSide }));
+  terrain.rotation.x = -Math.PI / 2; terrain.position.y = -8;
   scene.add(terrain);
 
-  tunnel = new THREE.Mesh(new THREE.CylinderGeometry(10, 10, 200, 32, 1, true), new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true, side: THREE.BackSide }));
+  // Massive Tunnel to avoid bleeding
+  tunnel = new THREE.Mesh(new THREE.CylinderGeometry(20, 20, 1000, 32, 1, true), new THREE.MeshPhongMaterial({ color: config.colors[0], wireframe: true, side: THREE.BackSide }));
   tunnel.rotation.x = Math.PI / 2;
   scene.add(tunnel);
 
+  const starGeo = new THREE.BufferGeometry();
+  const starPos = [];
+  for (let i = 0; i < 3000; i++) {
+    starPos.push((Math.random() - 0.5) * 100, (Math.random() - 0.5) * 100, (Math.random() - 0.5) * 200);
+  }
+  starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+  stars = new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.15 }));
+  scene.add(stars);
+
   scene.add(new THREE.AmbientLight(0xffffff, 0.5));
-  const p = new THREE.PointLight(0xffffff, 1); p.position.set(5, 5, 5); scene.add(p);
+  const p = new THREE.PointLight(0xffffff, 1); p.position.set(10, 10, 10); scene.add(p);
 }
 
 // --- Audio ---
@@ -144,10 +165,21 @@ async function setupAudio() {
 
 function draw() {
   animationId = requestAnimationFrame(draw);
-  if (analyser) analyser.getByteFrequencyData(dataArray);
+  if (analyser) {
+    analyser.getByteFrequencyData(dataArray);
+    
+    // Better synchronization: Average multiple bins
+    const avg = dataArray.reduce((a, b) => a + b) / dataArray.length;
+    const bassRange = dataArray.slice(0, 10);
+    const bass = bassRange.reduce((a, b) => a + b) / bassRange.length;
+    
+    // Smoothing logic (lerp)
+    smoothAvg += (avg - smoothAvg) * 0.15;
+    smoothBass += (bass - smoothBass) * 0.15;
+  }
 
   if (colorCycleToggle.checked) {
-    hueOffset = (hueOffset + 1) % 360;
+    hueOffset = (hueOffset + 0.5) % 360;
     config.colors = [`hsl(${hueOffset}, 100%, 50%)`, `hsl(${(hueOffset + 60) % 360}, 100%, 50%)` ];
   }
 
@@ -159,6 +191,8 @@ function draw2D() {
   ctx2d.clearRect(0, 0, w, h);
   const bars = dataArray.length; const cx = w / 2; const cy = h / 2; const r = Math.min(w, h) / 4; const sens = config.sensitivity;
   ctx2d.strokeStyle = config.colors[0]; ctx2d.lineWidth = 3; ctx2d.lineCap = 'round';
+
+  const val = (smoothAvg / 255) * r * (sens / 5);
 
   if (config.style.startsWith('circular')) {
     for (let i = 0; i < bars; i++) {
@@ -173,6 +207,14 @@ function draw2D() {
         x1 = cx + Math.cos(angle) * (r - barHeight/2); y1 = cy + Math.sin(angle) * (r - barHeight/2);
         x2 = cx + Math.cos(angle) * (r + barHeight/2); y2 = cy + Math.sin(angle) * (r + barHeight/2);
       }
+      ctx2d.beginPath(); ctx2d.moveTo(x1, y1); ctx2d.lineTo(x2, y2); ctx2d.stroke();
+    }
+  } else if (config.style === 'sunrise') {
+    const sunriseY = h * 0.8; const sunriseR = r * 1.5;
+    for (let i = 0; i < bars; i++) {
+      const barHeight = (dataArray[i] / 255) * r * (sens / 5); const angle = Math.PI + (i / bars) * Math.PI;
+      const x1 = cx + Math.cos(angle) * (sunriseR - barHeight/2); const y1 = sunriseY + Math.sin(angle) * (sunriseR - barHeight/2);
+      const x2 = cx + Math.cos(angle) * (sunriseR + barHeight/2); const y2 = sunriseY + Math.sin(angle) * (sunriseR + barHeight/2);
       ctx2d.beginPath(); ctx2d.moveTo(x1, y1); ctx2d.lineTo(x2, y2); ctx2d.stroke();
     }
   } else if (config.style === 'bars') {
@@ -195,34 +237,48 @@ function draw2D() {
 
 function draw3D() {
   const time = performance.now() * 0.001;
-  const avg = analyser ? (dataArray.reduce((a, b) => a + b) / dataArray.length) : 0;
-  const bass = analyser ? dataArray[0] : 0;
-  const intensity = (avg / 255) * config.sensitivity;
+  const intensity = (smoothAvg / 255) * config.sensitivity;
+  const bassIntensity = (smoothBass / 255) * config.sensitivity;
 
   sphere.visible = config.style === '3d-sphere';
   terrain.visible = config.style === '3d-terrain';
   tunnel.visible = config.style === '3d-tunnel';
+  stars.visible = config.style === '3d-stars';
 
   if (sphere.visible) {
-    sphere.scale.set(1 + bass/255 * 0.4, 1 + bass/255 * 0.4, 1 + bass/255 * 0.4);
+    const s = 1 + bassIntensity * 0.2;
+    sphere.scale.set(s, s, s);
     sphere.rotation.y += 0.01; sphere.material.color.set(config.colors[0]);
   }
   if (terrain.visible) {
     const pos = terrain.geometry.attributes.position.array;
     for (let i = 0; i < pos.length; i += 3) {
       const x = pos[i]; const y = pos[i+1]; const dist = Math.sqrt(x*x + y*y);
-      pos[i+2] = Math.sin(dist * 0.3 - time * 2) * intensity * 3;
+      pos[i+2] = Math.sin(dist * 0.2 - time * 2) * intensity * 5;
     }
     terrain.geometry.attributes.position.needsUpdate = true;
     terrain.material.color.set(config.colors[1]);
   }
   if (tunnel.visible) {
-    tunnel.rotation.z += 0.01; const s = 1 + (avg / 255) * 0.1; tunnel.scale.set(s, s, 1);
+    tunnel.rotation.z += 0.01; 
+    const s = 1 + intensity * 0.05; tunnel.scale.set(s, s, 1);
     tunnel.material.color.set(config.colors[0]);
-    camera.position.x = Math.sin(time) * 0.5; camera.position.y = Math.cos(time) * 0.5;
+    camera.position.x = Math.sin(time) * 1.5; camera.position.y = Math.cos(time) * 1.5;
   } else {
     camera.position.x = 0; camera.position.y = 0;
   }
+  if (stars.visible) {
+    const pos = stars.geometry.attributes.position.array;
+    const speed = 0.1 + intensity * 0.4; // Significantly slower base and peak speed
+    for (let i = 0; i < pos.length; i += 3) {
+      pos[i+2] += speed;
+      if (pos[i+2] > 50) pos[i+2] = -150; // Reset much further back for more depth
+    }
+    stars.geometry.attributes.position.needsUpdate = true;
+    stars.material.color.set(config.colors[0]);
+    stars.material.size = 0.1 + intensity * 0.1;
+  }
+
   if (logoSprite) { logoSprite.visible = true; updateLogoPosition3D(); }
   if (vhsPass) vhsPass.enabled = vhsToggle.checked;
   if (crtPass) crtPass.enabled = crtToggle.checked;
@@ -249,20 +305,28 @@ function drawBranding(ctx, w, h) {
 function updateLogoPosition3D() {
   if (!logoSprite || !brandImage) return;
   const logoAspect = brandImage.width / brandImage.height;
-  const baseScale = brandScale.value / 300; 
-  // Preserve logo aspect ratio while scaling within the 3D scene
+  
+  // Calculate size in 3D world space at distance (camera.z - sprite.z)
+  const spriteZ = 5;
+  const distance = Math.abs(camera.position.z - spriteZ);
+  const vFov = (camera.fov * Math.PI) / 180;
+  const screenHeightAtZ = 2 * Math.tan(vFov / 2) * distance;
+  const screenWidthAtZ = screenHeightAtZ * camera.aspect;
+
+  const baseScale = (brandScale.value / 100) * (screenHeightAtZ * 0.3); // Scale relative to screen height
   logoSprite.scale.set(baseScale * logoAspect, baseScale, 1);
   
-  const padding = 0.8; const aspect = canvas3d.width / canvas3d.height;
-  const hLimit = 2.5 * aspect; const vLimit = 2.5;
+  const hLimit = screenWidthAtZ / 2;
+  const vLimit = screenHeightAtZ / 2;
+  const padding = baseScale * 0.5;
+
   switch(brandPos.value) {
-    case 'top-right': logoSprite.position.set(hLimit - padding, vLimit - padding, 0); break;
-    case 'top-left': logoSprite.position.set(-hLimit + padding, vLimit - padding, 0); break;
-    case 'bottom-right': logoSprite.position.set(hLimit - padding, -vLimit + padding, 0); break;
-    case 'bottom-left': logoSprite.position.set(-hLimit + padding, -vLimit + padding, 0); break;
-    case 'center': logoSprite.position.set(0, 0, 0); break;
+    case 'top-right': logoSprite.position.set(hLimit - padding, vLimit - padding, spriteZ); break;
+    case 'top-left': logoSprite.position.set(-hLimit + padding, vLimit - padding, spriteZ); break;
+    case 'bottom-right': logoSprite.position.set(hLimit - padding, -vLimit + padding, spriteZ); break;
+    case 'bottom-left': logoSprite.position.set(-hLimit + padding, -vLimit + padding, spriteZ); break;
+    case 'center': logoSprite.position.set(0, 0, spriteZ); break;
   }
-  logoSprite.position.z = 2;
 }
 
 // --- Handlers ---
@@ -275,7 +339,7 @@ engineSelect.onchange = (e) => {
   } else {
     canvas3d.classList.remove('hidden'); if (logoSprite) logoSprite.visible = true;
   }
-  resize(); updateStyleOptions();
+  resize(); updateStyleOptions(); updateCycleOptions();
 };
 
 styleSelect.onchange = (e) => config.style = e.target.value;
@@ -358,7 +422,7 @@ function stopPreview() {
   cancelAnimationFrame(animationId);
   playBtn.disabled = false; stopPreviewBtn.disabled = true; engineSelect.disabled = false;
   statusBadge.textContent = 'Stopped';
-  dropZone.classList.remove('hidden'); // Show dropzone again when stopped
+  dropZone.classList.remove('hidden'); 
 }
 
 palettes.forEach(p => {
@@ -372,7 +436,7 @@ cycleToggle.onchange = () => {
   if (cycleToggle.checked) {
     cycleSelection.classList.remove('hidden');
     cycleInterval = setInterval(() => {
-      const checkedStyles = Array.from(cycleStyleCheckboxes).filter(cb => cb.checked).map(cb => cb.value);
+      const checkedStyles = Array.from(document.querySelectorAll('.cycle-style')).filter(cb => cb.checked).map(cb => cb.value);
       if (checkedStyles.length > 0) {
         const currentIndex = checkedStyles.indexOf(config.style);
         const nextStyle = checkedStyles[(currentIndex + 1) % checkedStyles.length];
