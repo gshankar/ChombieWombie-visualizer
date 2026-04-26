@@ -8,8 +8,9 @@ export const STYLES = {
     { id: 'circular-inner', name: 'Circular In' },
     { id: 'circular-dual', name: 'Circular Dual' },
     { id: 'sunrise', name: 'Neon Sunrise' },
-    { id: 'mystify', name: 'Neon Mystify' },
     { id: 'plasma', name: 'Cyber Plasma' },
+    { id: 'cyber-nebula', name: 'Cyber Nebula' },
+    { id: 'aurora', name: 'Aurora Flow' },
     { id: 'bars', name: 'Linear Bars' }
   ],
   '3d': [
