@@ -26,9 +26,28 @@
           <div class="drop-zone" id="drop-zone">
             <div class="drop-content">
               <div class="icon">🚀</div>
-              <button class="btn-primary" id="file-btn">Upload Your Track</button>
-              <p>or drag & drop here</p>
-              <input type="file" id="file-input" accept="audio/*" hidden />
+              <h2>Prepare Your Session</h2>
+              <p>Upload your track and branding to begin</p>
+              
+              <div class="upload-slots">
+                <div class="upload-slot" id="track-slot">
+                  <div class="slot-icon">🎵</div>
+                  <button class="btn-secondary" id="track-btn">Track</button>
+                  <span class="slot-status">Waiting...</span>
+                </div>
+                <div class="upload-slot" id="logo-slot">
+                  <div class="slot-icon">🖼️</div>
+                  <button class="btn-secondary" id="logo-btn">Logo</button>
+                  <span class="slot-status">Optional</span>
+                </div>
+              </div>
+
+              <div id="upload-error" class="error-msg hidden"></div>
+              
+              <button class="btn-primary hidden" id="start-btn">Start Visualizer</button>
+              
+              <input type="file" id="track-input" accept="audio/*" hidden />
+              <input type="file" id="logo-input" accept="image/*" hidden />
             </div>
           </div>
         </div>

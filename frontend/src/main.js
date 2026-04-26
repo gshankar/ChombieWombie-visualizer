@@ -304,6 +304,7 @@ playBtn.onclick = async () => {
   draw();
   playBtn.disabled = true;
   stopPreviewBtn.disabled = false;
+  engineSelect.disabled = true;
   source.onended = stopPreview;
 };
 
@@ -314,6 +315,7 @@ function stopPreview() {
   cancelAnimationFrame(animationId);
   playBtn.disabled = false;
   stopPreviewBtn.disabled = true;
+  engineSelect.disabled = false;
 }
 
 palettes.forEach(p => {
@@ -357,11 +359,16 @@ recordBtn.onclick = async () => {
   recordedChunks = [];
   mediaRecorder.ondataavailable = (e) => recordedChunks.push(e.data);
   mediaRecorder.onstop = exportVideo;
+  
   recordingOverlay.style.display = 'flex';
+  engineSelect.disabled = true;
   source.start(0);
   mediaRecorder.start();
   draw();
-  source.onended = () => mediaRecorder.stop();
+  source.onended = () => {
+    mediaRecorder.stop();
+    engineSelect.disabled = false;
+  };
 };
 
 async function exportVideo() {

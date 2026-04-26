@@ -142,10 +142,55 @@ main {
   filter: drop-shadow(0 0 20px var(--accent-1));
 }
 
-.drop-content p {
+.upload-slots {
+  display: flex;
+  gap: 2rem;
+  margin: 1rem 0;
+}
+
+.upload-slot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8rem;
+  padding: 1.5rem;
+  background: rgba(255,255,255,0.03);
+  border-radius: 16px;
+  border: 1px solid var(--glass-border);
+  transition: all 0.3s ease;
+  width: 140px;
+}
+
+.upload-slot.ready {
+  background: rgba(0, 242, 255, 0.05);
+  border-color: var(--accent-1);
+}
+
+.slot-icon {
+  font-size: 2rem;
+}
+
+.slot-status {
+  font-size: 0.75rem;
   color: var(--text-muted);
-  font-size: 0.9rem;
-  letter-spacing: 1px;
+}
+
+.upload-slot.ready .slot-status {
+  color: var(--accent-1);
+  font-weight: 600;
+}
+
+.error-msg {
+  color: #ff3b3b;
+  font-size: 0.85rem;
+  background: rgba(255, 59, 59, 0.1);
+  padding: 0.8rem 1.5rem;
+  border-radius: 8px;
+  border: 1px solid rgba(255, 59, 59, 0.2);
+}
+
+.hidden {
+  display: none !important;
 }
 
 .controls-panel {
